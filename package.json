@@ -4,7 +4,7 @@
     "description": "",
     "main": "src/server.ts",
     "scripts": {
-        "start": "ts-node -r ts-node/register/transpile-only -r tsconfig-paths/register ./src/server.ts",
+        "start": "node dist/server.js",
         "nodemon": "nodemon",
         "dev": "nodemon",
         "build": "tsc",
