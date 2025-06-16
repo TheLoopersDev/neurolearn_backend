@@ -15,103 +15,69 @@ import LevelModel from '../models/Level.model';
 import CategoryModel from '../models/Category.model';
 import SubCategoryModel from '../models/SubCategory.model';
 import UserModel from '../models/User.model';
+import LessonModel from '@/models/Lesson.model';
+import SectionModel from '@/models/Section.model';
+import { ICourse, ICoursePopulated } from '@/interfaces/Course';
 
 export const getCoursesByUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.user?._id;
-    if (!userId) {
-        return next(new ErrorHandler('Unauthorized - user not found', 401));
-    }
+    if (!userId) return next(new ErrorHandler('Unauthorized - user not found', 401));
 
-    // Lấy user để truy cập user.uploadedCourses
     const user = await UserModel.findById(userId).select('uploadedCourses');
-    if (!user) {
-        return next(new ErrorHandler('User not found', 404));
-    }
+    if (!user) return next(new ErrorHandler('User not found', 404));
 
-    // uploadedCourses là mảng ObjectId/string => tìm tất cả các khóa học có _id thuộc mảng này
-    const courses = await CourseModel.find({
-        _id: { $in: user.uploadedCourses }
-    });
-
-    // Nếu muốn bắt lỗi khi không có course nào
-    if (!courses || courses.length === 0) {
-        return next(new ErrorHandler('No courses found for this user', 404));
-    }
-
-    return res.status(200).json({
-        success: true,
-        data: courses
-    });
-});
-export const getTopRatedCoursesController = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { id: instructorId } = req.params; // Lấy giá trị `id` từ req.params
-
-    if (!instructorId) {
-        return next(new ErrorHandler('Instructor not found', 404));
-    }
-
-    // Find top-rated courses by the specific instructor
-    const topCourses = await CourseModel.find({ authorId: instructorId }) // Lọc đúng instructor
-        .sort({ rating: -1 })
-        .limit(10)
-        .populate('authorId', 'name email')
-        .populate('category', 'name')
+    const courses = await CourseModel.find({ _id: { $in: user.uploadedCourses } })
+        .populate('category subCategory level')
         .lean();
 
-    if (!topCourses || topCourses.length === 0) {
-        return next(new ErrorHandler('No courses found', 404));
-    }
+    if (!courses.length) return next(new ErrorHandler('No courses found for this user', 404));
 
-    // Add lesson count and duration
-    const coursesWithDetails = topCourses.map((course) => {
-        const lessonsCount = course.courseData?.length || 0;
-        const duration =
-            course.courseData?.reduce(
-                (acc: number, curr: { videoLength?: number }) => acc + (curr.videoLength ?? 0),
-                0
-            ) || 0;
-        const durationInHours = (duration / 60).toFixed(1);
-
-        return {
-            ...course,
-            lessonsCount,
-            duration: `${durationInHours} hours`
-        };
-    });
-
-    res.status(200).json({
-        success: true,
-        data: {
-            topCourses: coursesWithDetails
-        }
-    });
+    res.status(200).json({ success: true, data: courses });
 });
 
 export const getCoursesWithSort = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { type } = req.query;
 
-    if (!type || (type !== 'recent' && type !== 'oldest' && type !== 'bestselling')) {
+    if (!type || !['recent', 'oldest', 'bestselling'].includes(type as string)) {
         return next(new ErrorHandler('Invalid type parameter. Use "recent", "oldest", or "bestselling".', 400));
     }
 
-    let courses;
+    let query = CourseModel.find({ isPublished: true });
 
     if (type === 'recent') {
         const threeDaysAgo = new Date();
         threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
-
-        courses = await CourseModel.find({ createdAt: { $gte: threeDaysAgo }, isPublished: 'true' })
+        query = query
+            .find({ createdAt: { $gte: threeDaysAgo } })
             .sort({ createdAt: -1 })
             .limit(3);
     } else if (type === 'oldest') {
-        courses = await CourseModel.find({ isPublished: 'true' }).sort({ createdAt: 1 }).limit(10);
+        query = query.sort({ createdAt: 1 }).limit(10);
     } else if (type === 'bestselling') {
-        courses = await CourseModel.find({ isPublished: 'true' }).sort({ purchased: -1 }).limit(1);
+        query = query.sort({ purchased: -1 }).limit(1);
     }
+
+    const courses = await query.lean();
+
+    const coursesWithDetails = await Promise.all(
+        courses.map(async (course) => {
+            const sectionIds = course.sections || [];
+            const lessonsCount = await LessonModel.countDocuments({ sectionId: { $in: sectionIds } });
+
+            const durationInMinutes = course.duration || 0;
+            const durationInHours = (durationInMinutes / 60).toFixed(1);
+
+            return {
+                ...course,
+                lessonsCount,
+                duration: `${durationInHours} hours`
+            };
+        })
+    );
 
     res.status(200).json({
         success: true,
-        courses: courses
+        data: coursesWithDetails
     });
 });
 
@@ -128,44 +94,42 @@ export const updateCourse = catchAsync(async (req: Request, res: Response, next:
         return next(new ErrorHandler('Please provide a course id', 400));
     }
 
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        // .select(
-        //     '-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links'
-        // );
-        redis.set(courseId, JSON.stringify(course));
+    const course = await CourseModel.findById(courseId);
+    if (!course) {
+        return next(new ErrorHandler('Course not found', 404));
     }
 
     const data = req.body;
 
-    const thumbnail = data.thumbnail;
-    if (thumbnail) {
-        if (course?.thumbnail?.public_id) {
+    // Cập nhật thumbnail nếu có
+    if (data.thumbnail && data.thumbnail.startsWith('data:')) {
+        // Xoá thumbnail cũ nếu có
+        if (course.thumbnail?.public_id) {
             await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
         }
 
-        const myCloud = await cloudinary.v2.uploader.upload(thumbnail, {
+        // Upload thumbnail mới lên Cloudinary
+        const uploaded = await cloudinary.v2.uploader.upload(data.thumbnail, {
             folder: 'courses'
         });
 
         data.thumbnail = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url
+            public_id: uploaded.public_id,
+            url: uploaded.secure_url
         };
     }
 
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: data }, { new: true });
+    // Cập nhật course
+    const updatedCourse = await CourseModel.findByIdAndUpdate(courseId, { $set: data }, { new: true });
 
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
+    // Cập nhật Redis cache
+    if (updatedCourse) {
+        await redis.set(courseId, JSON.stringify(updatedCourse));
+    }
 
     res.status(200).json({
         success: true,
-        course: courseAfterUpdated
+        data: updatedCourse
     });
 });
 
@@ -193,7 +157,7 @@ export const publishCourse = catchAsync(async (req: Request, res: Response, next
 
     res.status(200).json({
         success: true,
-        course: courseAfterUpdated
+        data: courseAfterUpdated
     });
 });
 
@@ -221,196 +185,13 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 
     res.status(200).json({
         success: true,
-        course: courseAfterUpdated
-    });
-});
-
-// create section
-export const createSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const section = {
-        videoSection: req.body.title,
-        sectionOrder: [...new Map(course.courseData.map((item: any) => [item.videoSection, item])).values()].length + 1
-    };
-
-    course.courseData.push(section);
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-});
-
-// reorder section
-export const reorderSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const data = req.body;
-
-    course.courseData = course.courseData.map((b: any) => {
-        const match = data.find((a: any) => a.title === b.videoSection);
-        return match ? { ...b, sectionOrder: match.order } : b;
-    });
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-});
-
-// update section
-export const updateSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const { oldTitle, title } = req.body;
-
-    course.courseData = course.courseData.map((c: any) => {
-        const match = c.videoSection === oldTitle;
-        return match ? { ...c, videoSection: title } : c;
-    });
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-});
-
-// create lesson
-export const createLesson = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const { title, videoSection } = req.body;
-
-    const courseDataFilter = course.courseData.find((c: any) => {
-        return c.videoSection === videoSection && !c.title;
-    });
-
-    if (courseDataFilter) {
-        course.courseData = course.courseData.map((c: any) => {
-            const match = c._id === courseDataFilter._id;
-            return match ? { ...c, title: title, lessonOrder: 1 } : c;
-        });
-    } else {
-        course.courseData.push({
-            title,
-            videoSection,
-            isPublishedSection: course.courseData[0].isPublishedSection,
-            sectionOrder: course.courseData.find((item: any) => item.videoSection === videoSection).sectionOrder || 0,
-            lessonOrder: course.courseData.filter((c: any) => c.videoSection === videoSection).length + 1
-        });
-    }
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-});
-
-// reorder lesson
-export const reorderLesson = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const data = req.body;
-
-    course.courseData = course.courseData.map((b: any) => {
-        const match = data.find((a: any) => a.id === b._id);
-        return match ? { ...b, lessonOrder: match.order } : b;
-    });
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
+        data: courseAfterUpdated
     });
 });
 
 // get single course without purchase
+import { ICourseDetail } from '../interfaces/Course'; // interface mới
+
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
 
@@ -418,50 +199,103 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         return next(new ErrorHandler('Please provide course id', 400));
     }
 
-    let course = await CourseModel.findById(req.params.id)
-        .populate('authorId')
-        .select('-courseData.suggestion -courseData.questions -courseData.links');
-
-    course.courseData = course.courseData.filter(
-        (c: any) =>
-            c?.videoUrl?.url && c?.title && c?.description && c?.isPublished && c?.isPublishedSection && c?.videoSection
-    );
-
-    const sortedCourseData = (course.courseData = course.courseData.sort((a: any, b: any) => {
-        if (a.sectionOrder !== b.sectionOrder) {
-            return a.sectionOrder - b.sectionOrder; // Sort by sectionOrder first
-        }
-        return a.lessonOrder - b.lessonOrder; // If sectionOrder is the same, sort by lessonOrder
-    }));
-
-    course.courseData = sortedCourseData;
-
-    const modifiedCourseData = course.courseData.map((data: any) => {
-        if (data.isFree) {
-            return {
-                ...data.toObject(), // Convert Mongoose document to plain object
-                videoUrl: data.videoUrl // Include videoUrl
-            };
-        } else {
-            return {
-                ...data.toObject(),
-                videoUrl: undefined // Exclude videoUrl
-            };
-        }
-    });
-
-    course = {
-        ...course.toObject(),
-        courseData: modifiedCourseData
-    };
+    const course = await CourseModel.findById(courseId)
+        .populate([
+            { path: 'authorId', select: 'name email avatar profession description uploadedCourses' },
+            { path: 'level', select: 'name' },
+            {
+                path: 'sections',
+                match: { isPublished: true },
+                options: { sort: { order: 1 } },
+                populate: {
+                    path: 'lessons',
+                    match: { isPublished: true },
+                    options: { sort: { order: 1 } }
+                }
+            },
+            {
+                path: 'reviews',
+                populate: {
+                    path: 'user',
+                    select: 'name avatar'
+                }
+            }
+        ])
+        .lean<ICourseDetail>();
 
     if (!course) {
         return next(new ErrorHandler('Course not found', 404));
     }
 
-    res.status(200).json({
+    // ✅ Tính purchased (tổng số học sinh) từ tất cả khoá học của giảng viên
+    const instructorCourseIds = course.authorId.uploadedCourses || [];
+    const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
+    const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
+
+    const totalCourses = instructorCourseIds.length;
+
+    // ✅ Lọc video URL nếu không miễn phí
+    const processedSections = course.sections.map((section) => ({
+        ...section,
+        lessons: section.lessons.map((lesson) => ({
+            ...lesson,
+            videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+        }))
+    }));
+
+    const totalLessons = processedSections.reduce((sum, section) => sum + section.lessons.length, 0);
+
+    const hours = Math.floor(((course.duration as any) ?? 0) / 60);
+    const minutes = ((course.duration as any) ?? 0) % 60;
+    const durationText = `${hours}h ${minutes}m`;
+
+    // ✅ Trả về dữ liệu đầy đủ
+    const responseCourse = {
+        _id: course._id,
+        name: course.name,
+        subTitle: course.subTitle,
+        description: course.description,
+        thumbnail: course.thumbnail,
+        demoUrl: course.demoUrl,
+        price: course.price,
+        estimatedPrice: course.estimatedPrice,
+        isFree: course.isFree,
+        purchased: course.purchased ?? 0,
+        level: course.level?.name ?? null,
+        rating: course.rating ?? 0,
+        category: course.category,
+        subCategory: course.subCategory,
+        overview: course.overview || '',
+        topics: course.topics || [],
+        totalLessons,
+        durationText,
+        sections: processedSections,
+        publisher: {
+            name: course.authorId.name,
+            avatar: course.authorId.avatar,
+            email: course.authorId.email,
+            profession: course.authorId.profession,
+            description: course.authorId.introduce || '',
+            rating: course.rating ?? 0,
+            reviews: course.reviews.length,
+            students: totalStudents,
+            courses: totalCourses
+        },
+        reviews: course.reviews.map((r) => ({
+            _id: r._id,
+            rating: r.rating,
+            comment: r.comment,
+            user: {
+                name: r.user?.name,
+                avatar: r.user?.avatar
+            },
+            commentReplies: r.commentReplies || []
+        }))
+    };
+
+    return res.status(200).json({
         success: true,
-        course
+        courses: responseCourse
     });
 });
 
@@ -1486,7 +1320,7 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
     const topCourses = await CourseModel.find({ isPublished: true })
         .sort({ rating: -1, purchased: -1 })
         .limit(10)
-        .populate('authorId', 'name email')
+        .populate('authorId', 'name email avatar profession')
         .populate('category', 'name')
         .lean();
 
@@ -1494,30 +1328,43 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
         return next(new ErrorHandler('No courses found', 404));
     }
 
-    const coursesWithDetails = topCourses.map((course) => {
-        const lessonsCount = course.courseData?.length || 0;
+    const coursesWithDetails = await Promise.all(
+        topCourses.map(async (course) => {
+            const sectionIds = course.sections || [];
 
-        const duration =
-            course.courseData?.reduce((acc: number, curr: { videoLength?: number }) => {
-                return acc + (curr.videoLength || 0);
-            }, 0) || 0;
+            // Lấy tất cả section
+            const sections = await SectionModel.find({ _id: { $in: sectionIds } })
+                .select('lessons')
+                .lean();
 
-        const durationInHours = (duration / 60).toFixed(1);
+            const totalSections = sections.length;
+            const lessonIds = sections.flatMap((section) => section.lessons);
+            const totalLessons = lessonIds.length;
 
-        return {
-            ...course,
-            lessonsCount,
-            duration: `${durationInHours} hours`
-        };
-    });
+            return {
+                _id: course._id,
+                name: course.name,
+                subTitle: course.subTitle,
+                thumbnail: course.thumbnail?.url || null,
+                author: course.authorId,
+                category: course.category,
+                rating: course.rating,
+                price: course.price,
+                estimatedPrice: course.estimatedPrice,
+                purchased: course.purchased,
+                duration: (course.duration / 60).toFixed(1) + ' hours',
+                totalSections,
+                totalLessons
+            };
+        })
+    );
 
     res.status(200).json({
         success: true,
-        data: {
-            topCourses: coursesWithDetails
-        }
+        courses: coursesWithDetails
     });
 });
+
 
 export const searchCoursesAndInstructors = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { search } = req.body;

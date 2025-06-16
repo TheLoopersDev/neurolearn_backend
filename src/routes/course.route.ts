@@ -13,18 +13,12 @@ import {
     getPurchasedCourseByUser,
     getSingleCourse,
     getTopCourses,
-    getTopRatedCoursesController,
     updateCourse,
     uploadCourse,
     getCourseStatistics,
     getCoursesByUser,
     searchCoursesAndInstructors,
     getUploadedCourseByInstructor,
-    createSection,
-    reorderSection,
-    updateSection,
-    createLesson,
-    reorderLesson,
     updateLesson,
     uploadLessonVideo,
     generateVideoCloudinarySignature,
@@ -42,6 +36,7 @@ import {
     getCoursesWithSort
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
+import { createSection, updateSection } from '@/controllers/section.controller';
 
 /**
  * @swagger
@@ -642,122 +637,8 @@ router.put('/create-section/:id', updateAccessToken, isAuthenticated, createSect
  *       401:
  *         description: Not authenticated
  */
-router.put('/reorder-section/:id', updateAccessToken, isAuthenticated, reorderSection);
 
-/**
- * @swagger
- * /api/courses/update-section/{id}:
- *   put:
- *     summary: Update section
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - sectionId
- *               - title
- *             properties:
- *               sectionId:
- *                 type: string
- *               title:
- *                 type: string
- *     responses:
- *       200:
- *         description: Section updated successfully
- *       401:
- *         description: Not authenticated
- */
 router.put('/update-section/:id', updateAccessToken, isAuthenticated, updateSection);
-
-/**
- * @swagger
- * /api/courses/create-lesson/{id}:
- *   put:
- *     summary: Create new lesson in section
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - sectionId
- *               - title
- *             properties:
- *               sectionId:
- *                 type: string
- *               title:
- *                 type: string
- *     responses:
- *       200:
- *         description: Lesson created successfully
- *       401:
- *         description: Not authenticated
- */
-router.put('/create-lesson/:id', updateAccessToken, isAuthenticated, createLesson);
-
-/**
- * @swagger
- * /api/courses/reorder-lesson/{id}:
- *   put:
- *     summary: Reorder lessons in section
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - sectionId
- *               - lessons
- *             properties:
- *               sectionId:
- *                 type: string
- *               lessons:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     _id:
- *                       type: string
- *                     order:
- *                       type: number
- *     responses:
- *       200:
- *         description: Lessons reordered successfully
- *       401:
- *         description: Not authenticated
- */
-router.put('/reorder-lesson/:id', updateAccessToken, isAuthenticated, reorderLesson);
 
 /**
  * @swagger
