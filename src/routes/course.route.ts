@@ -15,7 +15,6 @@ import {
     getTopCourses,
     updateCourse,
     uploadCourse,
-    getCourseStatistics,
     getCoursesByUser,
     searchCoursesAndInstructors,
     getUploadedCourseByInstructor,
@@ -36,7 +35,7 @@ import {
     getCoursesWithSort
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
-import { createSection, updateSection } from '@/controllers/section.controller';
+import { createSection, updateSection } from '../controllers/section.controller';
 
 /**
  * @swagger
