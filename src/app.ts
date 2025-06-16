@@ -41,21 +41,22 @@ const allowedOrigins = Array.from(
 // cors
 app.use(
     cors({
-        origin: function (origin, callback) {
-            // Allow requests with no origin (like mobile apps or curl)
-            if (!origin) return callback(null, true);
-
-            if (allowedOrigins.includes(origin)) {
-                return callback(null, true);
+        origin: function (
+            origin: string | undefined,
+            callback: (err: Error | null, allow?: boolean) => void
+        ) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
             } else {
-                return callback(new Error('Not allowed by CORS'));
+                callback(new Error('Not allowed by CORS'));
             }
         },
+        credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-        credentials: true
     })
 );
+
 
 // Limit requests from same API
 const limiter = rateLimit({
