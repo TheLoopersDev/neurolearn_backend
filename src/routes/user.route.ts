@@ -282,7 +282,7 @@ router.put('/reset-password', resetPassword);
  *       401:
  *         description: Not authenticated
  */
-router.get('/logout', isAuthenticated, authorizeRoles('user', 'instructor'), logoutUser);
+router.get('/logout', updateAccessToken, isAuthenticated, logoutUser);
 
 /**
  * @swagger

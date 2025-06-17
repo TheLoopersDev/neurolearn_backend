@@ -9,3 +9,19 @@ export const authorizeRoles = (...roles: string[]) => {
         next();
     };
 };
+
+export const authorizeBusinessRoles = (...roles: string[]) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const user = req.user;
+
+        if (!user?.businessInfo || !user.businessInfo.role) {
+            return next(new ErrorHandler('You were not in any business', 403));
+        }
+
+        if (!roles.includes(user.businessInfo.role)) {
+            return next(new ErrorHandler(`Role ${user.businessInfo.role} is not allowed to access this resource`, 403));
+        }
+
+        next();
+    };
+};

@@ -69,7 +69,15 @@ app.use('/api', limiter);
 app.use(mongoSanitize());
 
 // Swagger documentation route
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+        swaggerOptions: {
+            persistAuthorization: true
+        }
+    })
+);
 
 // Serve all static files inside public directory.
 app.use('/static', express.static('public'));

@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Academix Password Reset</title>
+        <title>Academix Course Rejection Notification</title>
         <style type="text/css">
             body {
                 margin: 0;
@@ -39,6 +39,7 @@
                 background-color: #3858F8;
                 padding: 24px;
                 color: #fff;
+                text-align: center;
             }
             .email-body {
                 padding: 24px;
@@ -47,44 +48,24 @@
             .email-footer {
                 background-color: #f6f6f6;
                 padding: 24px;
-            }
-            .button {
-                display: inline-block;
-                background-color: #3858F8;
-                color: #fff;
-                font-size: 16px;
-                font-weight: 700;
                 text-align: center;
-                text-decoration: none;
-                padding: 12px 24px;
-                border-radius: 4px;
             }
         </style>
     </head>
     <body>
         <div class="email-wrapper">
             <div class="email-header">
-                <h1>Reset Your Password</h1>
+                <h1>Course Rejected</h1>
             </div>
             <div class="email-body">
                 <p>Hello <%= user.name %>,</p>
-                <p>
-                    We received a request to reset your password for your Academix account.
-                    Use the following code to reset your password:
-                </p>
-                <h2><%= resetCode %></h2>
-                <p>
-                    Please enter this code on the password reset page within the next 10 minutes.
-                </p>
-                <p>
-                    If you did not request a password reset, please ignore this email.
-                </p>
+                <p>We regret to inform you that your course "<strong><%= courseName %></strong>" has been rejected.</p>
+                <p>Reason for rejection: <strong><%= rejectionReason %></strong></p>
+                <p>You may review the course and resubmit it for approval.</p>
+                <p>If you need further assistance, feel free to contact us.</p>
             </div>
             <div class="email-footer">
-                <p>
-                    If you have any questions, please do not hesitate to contact us at
-                    <a href="mailto:support@academix.com">support@academix.com</a>
-                </p>
+                <p>If you have any questions, please contact us at <a href="mailto:support@academix.com">support@academix.com</a></p>
             </div>
         </div>
     </body>
