@@ -11,6 +11,7 @@ import progressRoutes from '../routes/progress.route';
 import incomeRoutes from '../routes/income.route';
 import paymentRoutes from '../routes/payment.route';
 import creditCardRoutes from '../routes/creditCard.route';
+import requestRoutes from '../routes/request.route';
 import sectionRoutes from '../routes/section.route';
 import lessonRoutes from '../routes/lesson.route';
 
@@ -43,5 +44,7 @@ router.use('/income', incomeRoutes);
 router.use('/payment', paymentRoutes);
 
 router.use('/credit-cards', creditCardRoutes);
+
+router.use('/request', requestRoutes);
 
 export default router;

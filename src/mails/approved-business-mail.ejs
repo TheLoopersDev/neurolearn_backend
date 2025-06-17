@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Academix Password Reset</title>
+        <title>Business Approval Notification</title>
         <style type="text/css">
             body {
                 margin: 0;
@@ -39,6 +39,7 @@
                 background-color: #3858F8;
                 padding: 24px;
                 color: #fff;
+                text-align: center;
             }
             .email-body {
                 padding: 24px;
@@ -47,11 +48,12 @@
             .email-footer {
                 background-color: #f6f6f6;
                 padding: 24px;
+                text-align: center;
             }
             .button {
                 display: inline-block;
                 background-color: #3858F8;
-                color: #fff;
+                color: #fff !important;
                 font-size: 16px;
                 font-weight: 700;
                 text-align: center;
@@ -64,27 +66,17 @@
     <body>
         <div class="email-wrapper">
             <div class="email-header">
-                <h1>Reset Your Password</h1>
+                <h1>Academix Business Approved</h1>
             </div>
             <div class="email-body">
                 <p>Hello <%= user.name %>,</p>
-                <p>
-                    We received a request to reset your password for your Academix account.
-                    Use the following code to reset your password:
-                </p>
-                <h2><%= resetCode %></h2>
-                <p>
-                    Please enter this code on the password reset page within the next 10 minutes.
-                </p>
-                <p>
-                    If you did not request a password reset, please ignore this email.
-                </p>
+                <p>We’re excited to inform you that your business "<strong><%= businessName %></strong>" has been successfully approved on Academix.</p>
+                <p>You can now manage your business account, invite employees, assign courses, and access your organization dashboard.</p>
+                <!-- <p><a class="button" href="<%= dashboardUrl %>">Go to Dashboard</a></p> -->
+                <p>Welcome aboard, and thank you for choosing Academix!</p>
             </div>
             <div class="email-footer">
-                <p>
-                    If you have any questions, please do not hesitate to contact us at
-                    <a href="mailto:support@academix.com">support@academix.com</a>
-                </p>
+                <p>If you have any questions, please contact us at <a href="mailto:support@academix.com">support@academix.com</a></p>
             </div>
         </div>
     </body>

@@ -118,12 +118,10 @@ export const UserSchema: Schema<UserT> = new Schema(
         },
         confirmPassword: {
             type: String,
-            // required: [true, 'Please confirm your password'],
             minlength: [6, 'Password must be more than 6 characters'],
             trim: true,
             validate: {
                 validator: function (this: UserT, el: string): boolean {
-                    // `this` only works correctly on save (not update queries)
                     return el === this.password;
                 },
                 message: 'Passwords do not match!'
@@ -133,7 +131,7 @@ export const UserSchema: Schema<UserT> = new Schema(
             type: String,
             trim: true,
             lowercase: true,
-            enum: ['user', 'admin', 'instructor'],
+            enum: ['user', 'admin', 'instructor', 'business'],
             default: 'user'
         },
         avatar: {
@@ -147,13 +145,13 @@ export const UserSchema: Schema<UserT> = new Schema(
         purchasedCourses: [
             {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: 'Course' // add relationship
+                ref: 'Course'
             }
         ],
         uploadedCourses: [
             {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: 'Course' // add relationship
+                ref: 'Course'
             }
         ],
         introduce: {
@@ -193,47 +191,63 @@ export const UserSchema: Schema<UserT> = new Schema(
             twitter: { type: String, default: '' },
             linkedin: { type: String, default: '' },
             instagram: { type: String, default: '' }
+        },
+        businessInfo: {
+            businessId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Business',
+                default: null
+            },
+            role: {
+                type: String,
+                enum: ['admin', 'manager', 'employee'],
+                default: null
+            }
         }
     },
     {
         timestamps: true,
         toJSON: {
             transform: (doc, ret) => {
-                delete ret.__v; // Remove __v field
+                delete ret.__v;
+                delete ret.password;
+                delete ret.confirmPassword;
                 return ret;
             }
         },
         toObject: {
             transform: (doc, ret) => {
-                delete ret.__v; // Remove __v field
+                delete ret.__v;
+                delete ret.password;
+                delete ret.confirmPassword;
                 return ret;
             }
         }
     }
 );
 
-// hash password before saving
+// Hash password before saving
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password')) return next();
     this.password = await bcrypt.hash(this.password, 12);
     next();
 });
 
-// sign access token
+// Sign access token
 UserSchema.methods.signAccessToken = function () {
     return jwt.sign({ id: this._id }, process.env.ACCESS_TOKEN || '', {
         expiresIn: '5m'
     });
 };
 
-// sign refresh token
+// Sign refresh token
 UserSchema.methods.signRefreshToken = function () {
     return jwt.sign({ id: this._id }, process.env.REFRESH_TOKEN || '', {
         expiresIn: '3d'
     });
 };
 
-// compare the password
+// Compare password
 UserSchema.methods.comparePassword = async function (enteredPassword: string): Promise<boolean> {
     return await bcrypt.compare(enteredPassword, this.password);
 };

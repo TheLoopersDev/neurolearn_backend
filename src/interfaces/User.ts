@@ -23,6 +23,10 @@ export interface UserT extends Document {
     phoneNumber: string;
     rating: number;
     student: number;
+    businessInfo?: {
+        businessId: mongoose.Types.ObjectId | null;
+        role: 'admin' | 'manager' | 'employee' | null;
+    };
 
     purchasedCourses: mongoose.Schema.Types.ObjectId[];
     uploadedCourses: mongoose.Schema.Types.ObjectId[];
