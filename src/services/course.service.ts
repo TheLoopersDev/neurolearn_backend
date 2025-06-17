@@ -9,13 +9,17 @@ export const createCourse = async (data: any, req: Request, res: Response, next:
     if (!user) {
         return next(new ErrorHandler('User is not logged in!', 400));
     }
+
+    // Gán authorId từ user đang login
     data.authorId = user._id;
+
     const course = await CourseModel.create(data);
 
+    // Gán courseId vào uploadedCourses[]
     user.uploadedCourses.push(course._id);
-
     await user.save();
 
+    // Cập nhật Redis cache
     await redis.set(user._id.toString(), JSON.stringify(user));
 
     res.status(201).json({

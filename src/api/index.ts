@@ -12,12 +12,18 @@ import incomeRoutes from '../routes/income.route';
 import paymentRoutes from '../routes/payment.route';
 import creditCardRoutes from '../routes/creditCard.route';
 import requestRoutes from '../routes/request.route';
+import sectionRoutes from '../routes/section.route';
+import lessonRoutes from '../routes/lesson.route';
 
 const router = express.Router();
 
 router.use('/users', userRoutes);
 
 router.use('/courses', courseRoutes);
+
+router.use('/sections', sectionRoutes);
+
+router.use('/lessons', lessonRoutes);
 
 router.use('/orders', orderRoutes);
 
