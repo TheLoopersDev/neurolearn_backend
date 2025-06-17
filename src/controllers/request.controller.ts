@@ -5,7 +5,7 @@ import RequestModel from '../models/Request.model';
 import CourseModel from '../models/Course.model';
 import UserModel from '../models/User.model';
 import sendMail from '../utils/sendMail';
-import BusinessModel from '@/models/Business.model';
+import BusinessModel from '../models/Business.model';
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
