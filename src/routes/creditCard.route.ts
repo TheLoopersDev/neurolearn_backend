@@ -5,6 +5,7 @@ import {
   getCreditCardByAccountNumberController,
   updateCreditCard,
   deleteCreditCard,
+  getBankInfo,
 } from '../controllers/creditCard.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
@@ -161,5 +162,21 @@ router.put('/', isAuthenticated, authorizeRoles('instructor'), updateCreditCard)
  *         description: Server error
  */
 router.delete('/', isAuthenticated, authorizeRoles('instructor'), deleteCreditCard);
+
+/**
+ * @swagger
+ * /api/credit-cards/bank-info:
+ *   get:
+ *     tags:
+ *       - Credit Cards
+ *     summary: Get list of supported banks from MoMo
+ *     description: Retrieves the list of supported banks from MoMo API
+ *     responses:
+ *       200:
+ *         description: List of banks retrieved successfully
+ *       500:
+ *         description: Server error
+ */
+router.get('/bank-info', getBankInfo);
 
 export default router; 
