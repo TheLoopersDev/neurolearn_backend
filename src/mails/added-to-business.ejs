@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Business Approval Notification</title>
+        <title>You've Been Added to a Business</title>
         <style type="text/css">
             body {
                 margin: 0;
@@ -31,6 +31,9 @@
                 margin-top: 0;
                 margin-bottom: 24px;
             }
+            table td {
+                vertical-align: top;
+            }
             .email-wrapper {
                 max-width: 600px;
                 margin: 0 auto;
@@ -39,7 +42,6 @@
                 background-color: #3858F8;
                 padding: 24px;
                 color: #fff;
-                text-align: center;
             }
             .email-body {
                 padding: 24px;
@@ -48,12 +50,11 @@
             .email-footer {
                 background-color: #f6f6f6;
                 padding: 24px;
-                text-align: center;
             }
             .button {
                 display: inline-block;
                 background-color: #3858F8;
-                color: #fff !important;
+                color: #fff;
                 font-size: 16px;
                 font-weight: 700;
                 text-align: center;
@@ -66,16 +67,29 @@
     <body>
         <div class="email-wrapper">
             <div class="email-header">
-                <h1>Academix Business Approved</h1>
+                <h1>You've Joined a Business on Academix</h1>
             </div>
             <div class="email-body">
                 <p>Hello <%= user.name %>,</p>
-                <p>We’re excited to inform you that your business "<strong><%= businessName %></strong>" has been successfully approved on Academix.</p>
-                <p>You can now manage your business account, invite employees, assign courses, and access your organization dashboard.</p>
-                <p>Welcome aboard, and thank you for choosing Academix!</p>
+                <p>
+                    You have been successfully added to the business
+                    <strong><%= businessName %></strong> with the role of
+                    <strong><%= role %></strong>.
+                </p>
+                <p>
+                    You can now log in to your Academix account and access
+                    business-related features based on your assigned role.
+                </p>
+                <p>
+                    If you believe this was a mistake, please contact your
+                    business administrator or our support team.
+                </p>
             </div>
             <div class="email-footer">
-                <p>If you have any questions, please contact us at <a href="mailto:support@academix.com">support@academix.com</a></p>
+                <p>
+                    If you have any questions, feel free to contact us at
+                    <a href="mailto:support@academix.com">support@academix.com</a>
+                </p>
             </div>
         </div>
     </body>

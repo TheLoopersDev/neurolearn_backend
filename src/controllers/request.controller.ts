@@ -213,7 +213,7 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
             template: action === 'approve' ? 'approved-business-mail.ejs' : 'reject-business-mail.ejs',
             data: {
                 user: { name: user.name },
-                businessName: business.name,
+                businessName: business.businessName,
                 rejectionReason:
                     action === 'reject' ? 'Your business verification request did not meet the requirements.' : ''
             }
