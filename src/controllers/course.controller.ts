@@ -200,7 +200,7 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
 
     const course = await CourseModel.findById(courseId)
         .populate([
-            { path: 'authorId', select: 'name email avatar profession description uploadedCourses' },
+            { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
             { path: 'level', select: 'name' },
             {
                 path: 'sections',
@@ -226,29 +226,36 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         return next(new ErrorHandler('Course not found', 404));
     }
 
-    // ✅ Tính purchased (tổng số học sinh) từ tất cả khoá học của giảng viên
-    const instructorCourseIds = course.authorId.uploadedCourses || [];
+    // Tổng học sinh
+    const instructorCourseIds = course.authorId?.uploadedCourses || [];
     const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
     const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
 
     const totalCourses = instructorCourseIds.length;
 
-    // ✅ Lọc video URL nếu không miễn phí
-    const processedSections = course.sections.map((section) => ({
-        ...section,
-        lessons: section.lessons.map((lesson) => ({
-            ...lesson,
-            videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-        }))
-    }));
+    // Lọc video nếu không miễn phí
+    const processedSections = Array.isArray(course.sections)
+        ? course.sections.map((section) => ({
+              ...section,
+              lessons: Array.isArray(section.lessons)
+                  ? section.lessons.map((lesson) => ({
+                        ...lesson,
+                        videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+                    }))
+                  : []
+          }))
+        : [];
 
-    const totalLessons = processedSections.reduce((sum, section) => sum + section.lessons.length, 0);
+    const totalLessons = processedSections.reduce(
+        (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
+        0
+    );
 
-    const hours = Math.floor(((course.duration as any) ?? 0) / 60);
-    const minutes = ((course.duration as any) ?? 0) % 60;
+    const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
+    const hours = Math.floor(durationInMinutes / 60);
+    const minutes = durationInMinutes % 60;
     const durationText = `${hours}h ${minutes}m`;
 
-    // ✅ Trả về dữ liệu đầy đủ
     const responseCourse = {
         _id: course._id,
         name: course.name,
@@ -265,31 +272,33 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         category: course.category,
         subCategory: course.subCategory,
         overview: course.overview || '',
-        topics: course.topics || [],
+        topics: Array.isArray(course.topics) ? course.topics : [],
         totalLessons,
         durationText,
         sections: processedSections,
         publisher: {
-            name: course.authorId.name,
-            avatar: course.authorId.avatar,
-            email: course.authorId.email,
-            profession: course.authorId.profession,
-            description: course.authorId.introduce || '',
+            name: course.authorId?.name || '',
+            avatar: course.authorId?.avatar || '',
+            email: course.authorId?.email || '',
+            profession: course.authorId?.profession || '',
+            description: course.authorId?.introduce || '',
             rating: course.rating ?? 0,
-            reviews: course.reviews.length,
+            reviews: Array.isArray(course.reviews) ? course.reviews.length : 0,
             students: totalStudents,
             courses: totalCourses
         },
-        reviews: course.reviews.map((r) => ({
-            _id: r._id,
-            rating: r.rating,
-            comment: r.comment,
-            user: {
-                name: r.user?.name,
-                avatar: r.user?.avatar
-            },
-            commentReplies: r.commentReplies || []
-        }))
+        reviews: Array.isArray(course.reviews)
+            ? course.reviews.map((r) => ({
+                  _id: r._id,
+                  rating: r.rating,
+                  comment: r.comment,
+                  user: {
+                      name: r.user?.name || '',
+                      avatar: r.user?.avatar || ''
+                  },
+                  commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
+              }))
+            : []
     };
 
     return res.status(200).json({
@@ -388,16 +397,16 @@ export const deleteLesson = catchAsync(async (req: Request, res: Response, next:
             const match = c._id === lesson._id;
             return match
                 ? {
-                    ...c,
-                    title: null,
-                    description: null,
-                    videoLength: null,
-                    isFree: false,
-                    videoUrl: null,
-                    links: [],
-                    isPublished: false,
-                    isPublishedSection: false
-                }
+                      ...c,
+                      title: null,
+                      description: null,
+                      videoLength: null,
+                      isFree: false,
+                      videoUrl: null,
+                      links: [],
+                      isPublished: false,
+                      isPublishedSection: false
+                  }
                 : c;
         });
     } else {
@@ -449,9 +458,9 @@ export const publishLesson = catchAsync(async (req: Request, res: Response, next
         const match = c._id === lesson._id;
         return match
             ? {
-                ...c,
-                isPublished: true
-            }
+                  ...c,
+                  isPublished: true
+              }
             : c;
     });
 
@@ -498,9 +507,9 @@ export const unPublishLesson = catchAsync(async (req: Request, res: Response, ne
         const match = c._id === lesson._id;
         return match
             ? {
-                ...c,
-                isPublished: false
-            }
+                  ...c,
+                  isPublished: false
+              }
             : c;
     });
 
@@ -544,9 +553,9 @@ export const publishSection = catchAsync(async (req: Request, res: Response, nex
         const match = c.videoSection === data.videoSection;
         return match
             ? {
-                ...c,
-                isPublishedSection: true
-            }
+                  ...c,
+                  isPublishedSection: true
+              }
             : c;
     });
 
@@ -590,9 +599,9 @@ export const unpublishSection = catchAsync(async (req: Request, res: Response, n
         const match = c.videoSection === data.videoSection;
         return match
             ? {
-                ...c,
-                isPublishedSection: false
-            }
+                  ...c,
+                  isPublishedSection: false
+              }
             : c;
     });
 
@@ -687,12 +696,12 @@ export const uploadLessonVideo = catchAsync(async (req: Request, res: Response, 
             const match = c._id === lesson._id;
             return match
                 ? {
-                    ...c,
-                    videoUrl: {
-                        public_id: myCloud.public_id,
-                        url: myCloud.secure_url
-                    }
-                }
+                      ...c,
+                      videoUrl: {
+                          public_id: myCloud.public_id,
+                          url: myCloud.secure_url
+                      }
+                  }
                 : c;
         });
     }
@@ -1363,7 +1372,6 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
         courses: coursesWithDetails
     });
 });
-
 
 export const searchCoursesAndInstructors = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { search } = req.body;
