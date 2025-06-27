@@ -101,22 +101,22 @@ export const updateCourse = catchAsync(async (req: Request, res: Response, next:
     const data = req.body;
 
     // Cập nhật thumbnail nếu có
-    if (data.thumbnail && data.thumbnail.startsWith('data:')) {
+    if (typeof data.thumbnail === "string" && data.thumbnail.startsWith("data:image")) {
         // Xoá thumbnail cũ nếu có
         if (course.thumbnail?.public_id) {
             await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
         }
 
-        // Upload thumbnail mới lên Cloudinary
         const uploaded = await cloudinary.v2.uploader.upload(data.thumbnail, {
-            folder: 'courses'
+            folder: 'courses',
         });
 
         data.thumbnail = {
             public_id: uploaded.public_id,
-            url: uploaded.secure_url
+            url: uploaded.secure_url,
         };
     }
+
 
     // Cập nhật course
     const updatedCourse = await CourseModel.findByIdAndUpdate(courseId, { $set: data }, { new: true });
@@ -295,6 +295,35 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
     return res.status(200).json({
         success: true,
         courses: responseCourse
+    });
+});
+
+export const getCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.id;
+
+    const course = await CourseModel.findById(courseId)
+        .populate("category", "title _id")
+        .populate("subCategory", "title _id")
+        .populate("level", "name _id")
+        .populate({
+            path: "reviews",
+            populate: {
+                path: "user",
+                select: "name avatar",
+            },
+        })
+        .populate({
+            path: "sections",
+            select: "title lessons duration",
+        });
+
+    if (!course) {
+        return next(new ErrorHandler("Course not found", 404));
+    }
+
+    res.status(200).json({
+        success: true,
+        courses: course,
     });
 });
 
@@ -644,72 +673,6 @@ export const deleteSection = catchAsync(async (req: Request, res: Response, next
     });
 });
 
-// upload video lesson
-
-export const uploadLessonVideo = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide a course id', 400));
-    }
-
-    const isCacheExist = await redis.get(courseId);
-    let course;
-
-    if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
-    } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
-    }
-
-    const data = req.body;
-
-    const video = data.video;
-
-    const lesson = course?.courseData.find((c: any) => c._id === data.id);
-
-    if (video && lesson) {
-        if (lesson?.videoUrl?.public_id) {
-            await cloudinary.v2.uploader.destroy(lesson.videoUrl.public_id);
-        }
-
-        const myCloud = await cloudinary.v2.uploader.upload(video, {
-            folder: 'lessons'
-        });
-
-        data.videoUrl = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url
-        };
-
-        course.courseData = course.courseData.map((c: any) => {
-            const match = c._id === lesson._id;
-            return match
-                ? {
-                    ...c,
-                    videoUrl: {
-                        public_id: myCloud.public_id,
-                        url: myCloud.secure_url
-                    }
-                }
-                : c;
-        });
-    }
-
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { $set: course }, { new: true });
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-
-    res.status(200).json({
-        success: true,
-        course: courseAfterUpdated
-    });
-});
 
 // get all courses without purchase
 export const getAllCoursesWithoutPurchase = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

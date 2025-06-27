@@ -1,13 +1,16 @@
 import express from 'express';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
+import { updateAccessToken } from '../controllers/user.controller';
 import {
     createSection,
     updateSection,
-    // publishSection,
-    // unpublishSection,
-    // deleteSection,
-    // getSectionsOfCourse,
-    // getSectionDetail
+    deleteSection,
+    getAllSections,
+    getSectionsByUserId,
+    reorderSections,
+    publishSection,
+    unpublishSection,
+    getSectionDetail
 } from '../controllers/section.controller';
 
 const router = express.Router();
@@ -15,7 +18,7 @@ const router = express.Router();
 /**
  * @swagger
  * /api/section/create/{courseId}:
- *   put:
+ *   post:
  *     summary: Create a new section in a course
  *     tags: [Sections]
  *     security:
@@ -39,8 +42,11 @@ const router = express.Router();
  *               title:
  *                 type: string
  *                 description: Title of the new section
+ *               description:
+ *                 type: string
+ *                 description: Description of the new section
  *     responses:
- *       200:
+ *       201:
  *         description: Section created successfully
  *       400:
  *         description: Bad request
@@ -49,27 +55,262 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/create/:courseId', isAuthenticated, createSection);
+router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSection);
 
 /**
- * Cập nhật section
+ * @swagger
+ * /api/section/update/{id}:
+ *   put:
+ *     summary: Update a section
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Section ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               order:
+ *                 type: number
+ *               isPublished:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Section updated successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Section not found
+ *       500:
+ *         description: Internal server error
  */
-router.put('/update/:courseId', isAuthenticated, updateSection);
+router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
 
 /**
- * Công khai section
+ * @swagger
+ * /api/section/delete/{sectionId}:
+ *   delete:
+ *     summary: Delete a section
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Section ID
+ *     responses:
+ *       200:
+ *         description: Section deleted successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Section not found
+ *       500:
+ *         description: Internal server error
  */
-// router.put('/publish/:courseId', isAuthenticated, publishSection);
+router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSection);
+
+/**
+ * @swagger
+ * /api/section/course/{courseId}:
+ *   get:
+ *     summary: Get all sections of a course
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Course ID
+ *     responses:
+ *       200:
+ *         description: List of sections
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/course/:courseId', updateAccessToken, isAuthenticated, getAllSections);
+
+/**
+ * @swagger
+ * /api/section/user/{userId}:
+ *   get:
+ *     summary: Get all sections by userId (author)
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID (author)
+ *     responses:
+ *       200:
+ *         description: List of sections
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/user/:userId', updateAccessToken, isAuthenticated, getSectionsByUserId);
+
+/**
+ * @swagger
+ * /api/section/reorder:
+ *   put:
+ *     summary: Reorder sections
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sectionOrders
+ *             properties:
+ *               sectionOrders:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     sectionId:
+ *                       type: string
+ *                     order:
+ *                       type: number
+ *     responses:
+ *       200:
+ *         description: Sections reordered successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
+
+/**
+ * @swagger
+ * /api/section/publish/{sectionId}:
+ *   put:
+ *     summary: Publish a section
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Section ID
+ *     responses:
+ *       200:
+ *         description: Section published successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Section not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/publish/:sectionId', updateAccessToken, isAuthenticated, publishSection);
+
+/**
+ * @swagger
+ * /api/section/unpublish/{sectionId}:
+ *   put:
+ *     summary: Unpublish a section
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Section ID
+ *     responses:
+ *       200:
+ *         description: Section unpublished successfully
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Section not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/unpublish/:sectionId', updateAccessToken, isAuthenticated, unpublishSection);
+
+/**
+ * @swagger
+ * /api/section/detail/{sectionId}:
+ *   get:
+ *     summary: Get detail of a section
+ *     tags: [Sections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sectionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Section ID
+ *     responses:
+ *       200:
+ *         description: Section detail
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Section not found
+ */
+router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionDetail);
 
 /**
  * Hủy công khai section
  */
 // router.put('/unpublish/:courseId', isAuthenticated, unpublishSection);
-
-/**
- * Xóa section
- */
-// router.put('/delete/:courseId', isAuthenticated, deleteSection);
 
 /**
  * Lấy danh sách tất cả section của course
