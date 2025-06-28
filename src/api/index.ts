@@ -16,6 +16,8 @@ import sectionRoutes from '../routes/section.route';
 import lessonRoutes from '../routes/lesson.route';
 import withdrawRoutes from '../routes/withdraw.route';
 import revenueRoutes from '../routes/revenue.route';
+import businessRoutes from '../routes/business.route';
+
 
 const router = express.Router();
 
@@ -52,5 +54,7 @@ router.use('/request', requestRoutes);
 router.use('/withdraw', withdrawRoutes);
 
 router.use('/revenue', revenueRoutes);
+
+router.use('/business', businessRoutes);
 
 export default router;
