@@ -3,6 +3,14 @@ import { payos, verifyWebhookSignature } from '../utils/payos';
 import Order from '../models/Order.model';
 import User from '../models/User.model';
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'http://localhost:3000';
+
+const webhookUrl =
+    process.env.NODE_ENV === 'production' ? process.env.PAYOS_WEBHOOK_URL : 'https://neurolearn-backend.onrender.com/api/payment/webhook';
 
 export const createPaymentLink = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -24,8 +32,9 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             orderCode,
             amount,
             description,
-            returnUrl: `https://your-frontend.com/payment-success?orderCode=${orderCode}`,
-            cancelUrl: 'https://your-frontend.com/payment-cancelled',
+            returnUrl: `${clientUrl}/purchase-history/${orderCode}`,
+            cancelUrl: `${clientUrl}`,
+            webhookUrl,
             extraData: JSON.stringify({ userId, courseIds })
         } as any);
 
