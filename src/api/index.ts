@@ -15,6 +15,7 @@ import requestRoutes from '../routes/request.route';
 import sectionRoutes from '../routes/section.route';
 import lessonRoutes from '../routes/lesson.route';
 import businessRoutes from '../routes/business.route';
+import cartRoutes from '../routes/cart.route';
 
 const router = express.Router();
 
@@ -49,5 +50,7 @@ router.use('/credit-cards', creditCardRoutes);
 router.use('/request', requestRoutes);
 
 router.use('/business', businessRoutes);
+
+router.use('/cart', cartRoutes);
 
 export default router;
