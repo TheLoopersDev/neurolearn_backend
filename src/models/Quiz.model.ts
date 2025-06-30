@@ -1,64 +1,84 @@
 import mongoose, { Schema } from 'mongoose';
 import { IQuiz, IQuestion } from '../interfaces/Quiz';
 
-const questionSchema = new Schema<IQuestion>({
-    text: { type: String, required: true },
-    type: {
-        type: String,
-        required: true,
-        enum: ['single-choice', 'multiple-choice']
+const answerOptionSchema = new Schema(
+    {
+        id: { type: String, required: true },
+        text: { type: String, required: true }
     },
-    points: { type: Number, required: true },
-    options: {
-        type: [String],
-        required: function () {
-            return (this as any).type === 'single-choice' || (this as any).type === 'multiple-choice';
-        }
+    { _id: false }
+);
+
+const questionSchema = new Schema<IQuestion>(
+    {
+        questionNumber: { type: Number, required: true },
+        title: { type: String, required: true }, // corresponds to frontend's `title`
+        questionType: {
+            type: String,
+            required: true,
+            enum: ['single-choice', 'multiple-choice']
+        },
+        questionImage: { type: String, default: null },
+
+        choicesConfig: {
+            isMultipleAnswer: { type: Boolean, default: false },
+            isAnswerWithImageEnabled: { type: Boolean, default: false }
+        },
+
+        options: {
+            type: [answerOptionSchema],
+            required: true
+        },
+
+        correctAnswerIds: {
+            type: [String],
+            required: true
+        },
+        points: { type: String, required: true },
+        isRequired: { type: Boolean, default: false }
     },
-    correctAnswer: {
-        type: mongoose.Schema.Types.Mixed,
-        required: true,
-        validate: {
-            validator: function (v: any) {
-                if ((this as any).type === 'single-choice') {
-                    return (this as any).options.includes(v);
-                } else if ((this as any).type === 'multiple-choice') {
-                    return Array.isArray(v) && v.every((ans: any) => (this as any).options.includes(ans));
-                }
-                return false;
-            },
-            message: 'Incorrect answer format for this question type'
-        }
-    }
-});
+    { _id: false }
+);
 
 const quizSchema = new Schema<IQuiz>(
     {
-        title: { type: String, required: true },
-        description: { type: String },
-        difficulty: {
-            type: String,
-            required: true,
-            enum: ['easy', 'medium', 'hard']
+        name: { type: String, required: true }, // frontend's name
+        examTitle: { type: String },
+        duration: { type: String, required: true },
+        imageUrl: { type: String },
+        category: { type: String },
+        progress: { type: Number },
+        totalQuestions: { type: Number },
+
+        questions: {
+            type: [questionSchema],
+            required: true
         },
-        duration: { type: Number, required: true },
-        passingScore: { type: Number, required: true },
-        maxAttempts: { type: Number, required: true },
-        isPublished: { type: Boolean, default: false },
+
         instructorId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             required: true
         },
-        questions: [questionSchema],
-        sectionOrder: { type: Number, required: false },
-        lessonOrder: { type: Number, required: false },
-        videoSection: { type: String, required: true },
+
         courseId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Course',
             required: true
         },
+
+        description: { type: String },
+        difficulty: {
+            type: String,
+            enum: ['easy', 'medium', 'hard'],
+            required: true
+        },
+        passingScore: { type: Number, required: true },
+        maxAttempts: { type: Number, required: true },
+        isPublished: { type: Boolean, default: false },
+
+        sectionOrder: { type: Number },
+        lessonOrder: { type: Number },
         userScores: [
             {
                 user: {
