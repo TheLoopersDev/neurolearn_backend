@@ -16,6 +16,7 @@ import './middlewares/errors/unhandledRejection';
 
 // Import Routes
 import api from './api';
+import { payosWebhook } from './controllers/payment.controller';
 
 const app = express();
 
@@ -27,6 +28,8 @@ app.set('trust proxy', 1);
 
 // Set security HTTP headers
 app.use(helmet());
+
+app.post('/api/payment/webhook', express.raw({ type: 'application/json' }), payosWebhook);
 
 // body parser
 app.use(express.json({ limit: '50mb' }));

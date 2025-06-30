@@ -152,18 +152,9 @@ export const getOrder = catchAsync(async (req: Request, res: Response, next: Nex
         return next(new ErrorHandler('Order not found', 404));
     }
 
-    const orders = await OrderModel.find().sort({ createdAt: 1 });
-
-    const orderIndex = orders.findIndex((o) => o._id.toString() === orderId);
-
-    if (orderIndex === -1) {
-        return next(new ErrorHandler('Order not found in the list', 404));
-    }
-
     res.status(200).json({
         success: true,
-        order,
-        position: orderIndex + 1
+        order
     });
 });
 // send stripe publish key
@@ -193,20 +184,13 @@ export const newPayment = catchAsync(async (req: Request, res: Response, next: N
 // get all orders of a specific user with Redis caching
 export const getUserOrders = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.user?._id;
-    const isCacheExist = await redis.get(`allOrders ${req.user?._id}`);
-    let orders;
 
-    if (isCacheExist) {
-        orders = JSON.parse(isCacheExist);
-    } else {
-        orders = await OrderModel.find({ userId })
-            .populate({
-                path: 'courseIds',
-                select: 'name price'
-            })
-            .sort({ createdAt: -1 });
-        redis.set(`allOrders ${req.user?._id}`, JSON.stringify(orders));
-    }
+    let orders = await OrderModel.find({ userId })
+        .populate({
+            path: 'courseIds'
+        })
+        .sort({ createdAt: -1 });
+
     res.status(200).json({
         success: true,
         orders

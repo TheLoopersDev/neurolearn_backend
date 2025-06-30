@@ -9,12 +9,9 @@ dotenv.config();
 
 const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'http://localhost:3000';
 
-const webhookUrl =
-    process.env.NODE_ENV === 'production' ? process.env.PAYOS_WEBHOOK_URL : 'https://neurolearn-backend.onrender.com/api/payment/webhook';
-
 export const createPaymentLink = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { amount, description, courseIds, userId } = req.body;
+        const { amount, description, courseIds, userId, webhookUrl } = req.body;
 
         if (!amount || !description || !Array.isArray(courseIds) || !userId) {
             res.status(400).json({ error: 'Missing require field' });
@@ -32,11 +29,19 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             orderCode,
             amount,
             description,
-            returnUrl: `${clientUrl}/purchase-history/${orderCode}`,
+            returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
             cancelUrl: `${clientUrl}`,
             webhookUrl,
             extraData: JSON.stringify({ userId, courseIds })
         } as any);
+        // Save Order vào DB để tra cứu khi webhook đến
+        await Order.create({
+            userId,
+            courseIds: courseIds.map((id) => new mongoose.Types.ObjectId(id)),
+            payment_info: `PayOS`,
+            orderCode,
+            price: amount
+        });
 
         res.json({ checkoutUrl: paymentLinkRes.checkoutUrl });
     } catch (error) {
@@ -47,40 +52,42 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
 export const payosWebhook = async (req: Request, res: Response): Promise<void> => {
     try {
-        const rawBody = JSON.stringify(req.body);
+        const rawBody = req.body.toString('utf8'); // ✅ req.body là Buffer nếu dùng express.raw
         const signature = req.headers['x-signature'] as string;
 
-        const isValid = verifyWebhookSignature(rawBody, signature);
-        if (!isValid) {
-            console.warn('❌ Webhook bị giả mạo');
-            res.status(400).end();
-            return;
-        }
+        // const isValid = verifyWebhookSignature(rawBody, signature);
+        // if (!isValid) {
+        //     console.warn('❌ Webhook bị giả mạo');
+        //     res.status(400).send('Invalid signature');
+        //     return;
+        // }
 
-        const webhookData = req.body;
-        if (webhookData.status === 'PAID') {
-            const extraData = JSON.parse(webhookData.extraData || '{}');
-            const userId = extraData.userId;
-            const courseIds: string[] = extraData.courseIds;
+        const webhookData = JSON.parse(rawBody); // ✅ parse lại JSON
+        console.log('✅ Webhook data:', webhookData);
 
-            if (!userId || !Array.isArray(courseIds)) {
-                res.status(400).end();
+        if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
+            const orderCode = webhookData.data.orderCode;
+
+            const order = await Order.findOne({ orderCode });
+            if (!order) {
+                console.warn('❌ Không tìm thấy đơn hàng với orderCode:', orderCode);
+                res.status(404).send('Order not found');
                 return;
             }
 
-            await User.findByIdAndUpdate(userId, {
-                $addToSet: {
-                    purchasedCourses: { $each: courseIds.map((id) => new mongoose.Types.ObjectId(id)) }
-                }
-            });
+            const user = await User.findById(order.userId);
+            if (!user) {
+                console.warn('❌ Không tìm thấy người dùng:', order.userId);
+                res.status(404).send('User not found');
+                return;
+            }
 
-            await Order.create({
-                userId,
-                courseIds: courseIds.map((id) => new mongoose.Types.ObjectId(id)),
-                payment_info: `PayOS orderCode: ${webhookData.orderCode}`
-            });
+            // Push courseIds trực tiếp, không cần check
+            const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
+            user.purchasedCourses.push(...courseIds);
+            await user.save();
 
-            console.log('✅ Đã xử lý thanh toán');
+            console.log('✅ Đã thêm courseIds vào purchasedCourses');
         }
 
         res.sendStatus(200);

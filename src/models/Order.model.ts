@@ -17,7 +17,9 @@ const OrderSchema = new Schema<IOrder>(
         },
         payment_info: {
             type: String
-        }
+        },
+        price: Number,
+        orderCode: String
     },
     { timestamps: true }
 );
