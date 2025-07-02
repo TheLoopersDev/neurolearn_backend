@@ -63,7 +63,6 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         // }
 
         const webhookData = JSON.parse(rawBody); // ✅ parse lại JSON
-        console.log('✅ Webhook data:', webhookData);
 
         if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
             const orderCode = webhookData.data.orderCode;

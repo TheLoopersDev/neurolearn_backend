@@ -3,13 +3,25 @@ import { redis } from '../utils/redis';
 import { Response } from 'express';
 
 export const getUserById = async (id: string, res: Response) => {
-    const userJSON = await redis.get(id);
+    try {
+        const user = await UserModel.findById(id);
 
-    if (userJSON) {
-        const user = JSON.parse(userJSON);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
         res.status(200).json({
             success: true,
             user
+        });
+    } catch (error) {
+        console.error('Error fetching user:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
         });
     }
 };

@@ -140,13 +140,13 @@ export const getAllOrders = catchAsync(async (req: Request, res: Response, next:
 
 // get single order
 export const getOrder = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const orderId = req.params.id;
+    const orderCode = req.params.id;
 
-    if (!orderId) {
+    if (!orderCode) {
         return next(new ErrorHandler('Please provide order id', 400));
     }
 
-    const order = await OrderModel.findById(orderId).populate('userId').populate('courseIds');
+    const order = await OrderModel.findOne({ orderCode }).populate('userId').populate('courseIds');
 
     if (!order) {
         return next(new ErrorHandler('Order not found', 404));
