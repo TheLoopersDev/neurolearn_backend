@@ -69,3 +69,107 @@ export const updateSection = catchAsync(async (req: Request, res: Response, next
         section
     });
 });
+
+export const deleteSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = req.params.sectionId;
+
+    if (!sectionId) {
+        return next(new ErrorHandler('Section ID is required', 400));
+    }
+
+    const section = await SectionModel.findById(sectionId);
+    if (!section) return next(new ErrorHandler('Section not found', 404));
+
+    await section.deleteOne();
+
+    res.status(200).json({
+        success: true,
+        message: 'Section deleted successfully',
+    });
+});
+
+export const getAllSections = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.courseId;
+    if (!courseId) {
+        return next(new ErrorHandler('Course ID is required', 400));
+    }
+    const sections = await SectionModel.find({ courseId }).sort({ order: 1 });
+    res.status(200).json({
+        success: true,
+        data: sections
+    });
+});
+
+export const getSectionsByUserId = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.params.userId;
+    if (!userId) {
+        return next(new ErrorHandler('User ID is required', 400));
+    }
+    // Giả sử Section có trường createdBy hoặc course có trường author
+    const courses = await CourseModel.find({ author: userId });
+    const courseIds = courses.map(course => course._id);
+    const sections = await SectionModel.find({ courseId: { $in: courseIds } }).sort({ order: 1 });
+    res.status(200).json({
+        success: true,
+        data: sections
+    });
+});
+
+export const reorderSections = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { sectionOrders } = req.body; // [{ sectionId, order }]
+    if (!Array.isArray(sectionOrders)) {
+        return next(new ErrorHandler('sectionOrders must be an array', 400));
+    }
+    for (const { sectionId, order } of sectionOrders) {
+        await SectionModel.findByIdAndUpdate(sectionId, { order });
+    }
+    res.status(200).json({
+        success: true,
+        message: 'Sections reordered successfully'
+    });
+});
+
+export const publishSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = req.params.sectionId;
+    if (!sectionId) {
+        return next(new ErrorHandler('Section ID is required', 400));
+    }
+    const section = await SectionModel.findById(sectionId);
+    if (!section) return next(new ErrorHandler('Section not found', 404));
+    section.isPublished = true;
+    await section.save();
+    res.status(200).json({
+        success: true,
+        message: 'Section published successfully',
+        data: section
+    });
+});
+
+export const unpublishSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = req.params.sectionId;
+    if (!sectionId) {
+        return next(new ErrorHandler('Section ID is required', 400));
+    }
+    const section = await SectionModel.findById(sectionId);
+    if (!section) return next(new ErrorHandler('Section not found', 404));
+    section.isPublished = false;
+    await section.save();
+    res.status(200).json({
+        success: true,
+        message: 'Section unpublished successfully',
+        data: section
+    });
+});
+
+export const getSectionDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = req.params.sectionId;
+    if (!sectionId) {
+        return next(new ErrorHandler('Section ID is required', 400));
+    }
+    const section = await SectionModel.findById(sectionId).populate('lessons');
+    if (!section) return next(new ErrorHandler('Section not found', 404));
+    res.status(200).json({
+        success: true,
+        data: section
+    });
+});
