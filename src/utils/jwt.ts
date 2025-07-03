@@ -45,7 +45,9 @@ export const sendToken = (user: UserT, statusCode: number, res: Response) => {
         throw new Error('User ID is missing');
     }
 
-    redis.set(user._id.toString(), JSON.stringify(user));
+    // Ensure user ID is stored as string in Redis
+    const userId = user._id.toString();
+    redis.set(userId, JSON.stringify(user));
 
     // Set cookies
     res.cookie('access_token', accessToken, accessTokenOptions);
