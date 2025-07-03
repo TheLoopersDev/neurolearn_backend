@@ -3,13 +3,28 @@ import { redis } from '../utils/redis';
 import { Response } from 'express';
 
 export const getUserById = async (id: string, res: Response) => {
-    const userJSON = await redis.get(id);
+    try {
+        // Ensure id is a string
+        const userId = id.toString();
+        const userJSON = await redis.get(userId);
 
-    if (userJSON) {
-        const user = JSON.parse(userJSON);
-        res.status(200).json({
-            success: true,
-            user
+        if (userJSON) {
+            const user = JSON.parse(userJSON);
+            res.status(200).json({
+                success: true,
+                user
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+    } catch (error) {
+        console.error('Error in getUserById:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
         });
     }
 };
@@ -24,12 +39,29 @@ export const getAllUsersService = async (res: Response) => {
 };
 
 export const updateUserRoleService = async (res: Response, id: string, role: string) => {
-    const user = await UserModel.findByIdAndUpdate(id, { role }, { new: true });
-    await redis.set(id, JSON.stringify(user));
-    res.status(200).json({
-        success: true,
-        user
-    });
+    try {
+        const userId = id.toString();
+        const user = await UserModel.findByIdAndUpdate(userId, { role }, { new: true });
+        
+        if (user) {
+            await redis.set(userId, JSON.stringify(user));
+            res.status(200).json({
+                success: true,
+                user
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+    } catch (error) {
+        console.error('Error in updateUserRoleService:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
 };
 
 export const getAllInstructorsService = async (res: Response) => {
@@ -39,4 +71,18 @@ export const getAllInstructorsService = async (res: Response) => {
         success: true,
         instructors
     });
+};
+
+export const getUserInfoForChat = async (userId: string) => {
+    return await UserModel.findById(userId, '_id name avatar email');
+};
+
+export const getAllUsersForChat = async () => {
+    try {
+        const users = await UserModel.find({}, '_id name avatar email role').sort({ name: 1 });
+        return users;
+    } catch (error) {
+        console.error('Error in getAllUsersForChat service:', error);
+        throw error;
+    }
 };
