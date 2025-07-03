@@ -415,7 +415,7 @@ export const getUserInfo = catchAsync(async (req: Request, res: Response, next: 
         return next(new ErrorHandler('User not authenticated', 500));
     }
 
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
     getUserById(userId, res);
 });
 
