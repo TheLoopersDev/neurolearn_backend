@@ -30,6 +30,7 @@ export interface UserT extends Document {
 
     purchasedCourses: mongoose.Schema.Types.ObjectId[];
     uploadedCourses: mongoose.Schema.Types.ObjectId[];
+    assignedCourses: mongoose.Schema.Types.ObjectId[];
     isVerified: boolean;
     confirmPassword: (password: string) => Promise<boolean>;
     signAccessToken: () => string;

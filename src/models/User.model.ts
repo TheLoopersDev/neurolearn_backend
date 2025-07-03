@@ -154,6 +154,28 @@ export const UserSchema: Schema<UserT> = new Schema(
                 ref: 'Course'
             }
         ],
+        assignedCourses: [
+            {
+                course: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'Course',
+                    required: true
+                },
+                startDate: {
+                    type: Date,
+                    required: true
+                },
+                dueDate: {
+                    type: Date,
+                    required: true
+                },
+                status: {
+                    type: String,
+                    enum: ['not_started', 'in_progress', 'completed'],
+                    default: 'not_started'
+                }
+            }
+        ],
         introduce: {
             type: String,
             default: ''
