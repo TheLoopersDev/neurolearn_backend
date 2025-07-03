@@ -79,6 +79,6 @@ router.post('/create-payment-link', createPaymentLink);
  *       500:
  *         description: Lỗi xử lý webhook
  */
-router.post('/webhook', express.json({ type: '*/*' }), payosWebhook);
+// router.post('/webhook', express.raw({ type: 'application/json' }), payosWebhook);
 
 export default router;
