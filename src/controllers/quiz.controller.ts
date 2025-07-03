@@ -64,16 +64,16 @@ export const createQuiz = catchAsync(async (req: Request, res: Response, next: N
         lessonOrder
     } = req.body;
 
-    // Validate required fields
-    if (!name || !duration || !difficulty || !passingScore || !maxAttempts || !instructorId || !courseId) {
-        return next(new ErrorHandler('Missing required fields', 400));
-    }
+    // Temporarily skip required field validation
+    // if (!name || !duration || !difficulty || !passingScore || !maxAttempts || !instructorId || !courseId) {
+    //     return next(new ErrorHandler('Missing required fields', 400));
+    // }
 
     // Optional: Validate if course exists
-    const courseExists = await Course.findById(courseId);
-    if (!courseExists) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
+    // const courseExists = await Course.findById(courseId);
+    // if (!courseExists) {
+    //     return next(new ErrorHandler('Course not found', 404));
+    // }
 
     // Create quiz document
     const quiz = await Quiz.create({

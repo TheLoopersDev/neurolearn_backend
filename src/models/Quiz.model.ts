@@ -57,24 +57,30 @@ const quizSchema = new Schema<IQuiz>(
 
         instructorId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true
+            ref: 'User'
+            // required: true
         },
 
         courseId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Course',
-            required: true
+            ref: 'Course'
+            // required: true
         },
 
         description: { type: String },
         difficulty: {
             type: String,
-            enum: ['easy', 'medium', 'hard'],
-            required: true
+            enum: ['easy', 'medium', 'hard']
+            // required: true
         },
-        passingScore: { type: Number, required: true },
-        maxAttempts: { type: Number, required: true },
+        passingScore: {
+            type: Number
+            // required: true
+        },
+        maxAttempts: {
+            type: Number
+            // required: true
+        },
         isPublished: { type: Boolean, default: false },
 
         sectionOrder: { type: Number },
