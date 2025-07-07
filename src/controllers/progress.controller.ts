@@ -4,10 +4,12 @@ import ErrorHandler from '../utils/ErrorHandler';
 import ProgressModel from '../models/Progress.model';
 import CourseModel from '../models/Course.model';
 import { redis } from '../utils/redis';
+import LessonModel from '@/models/Lesson.model';
+import SectionModel from '@/models/Section.model';
 
 // Update lesson completion status via Progress model
 export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.user?._id; // Lấy userId từ middleware xác thực
+    const userId = req.user?._id;
     const courseId = req.params.id;
     const { lessonId, isCompleted } = req.body;
 
@@ -15,83 +17,67 @@ export const updateLessonCompletionStatus = catchAsync(async (req: Request, res:
         return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
     }
 
-    // Tìm khóa học để kiểm tra lesson có tồn tại không
-    const course = await CourseModel.findById(courseId);
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
+    const lesson = await LessonModel.findById(lessonId).populate('sectionId');
+    if (!lesson) return next(new ErrorHandler('Lesson not found', 404));
 
-    // Kiểm tra xem bài học thuộc section nào trong courseData
-    let sectionName: string | null = null;
-    for (const section of course.courseData) {
-        if (section._id.toString() === lessonId) {
-            sectionName = section.videoSection;
-            break;
-        }
-    }
+    const section = await SectionModel.findById(lesson.sectionId._id);
+    if (!section) return next(new ErrorHandler('Section not found', 404));
 
-    if (!sectionName) {
-        return next(new ErrorHandler('Lesson not found in course', 404));
-    }
+    const sectionTitle = section.title;
+    const sectionLength = section.lessons.length;
 
-    // Kiểm tra xem Progress của user đã tồn tại chưa, nếu chưa thì tạo mới
     let progress = await ProgressModel.findOne({ user: userId, course: courseId });
-
     if (!progress) {
+        const totalLessons = await LessonModel.countDocuments({
+            sectionId: { $in: (await SectionModel.find({ courseId })).map((s) => s._id) }
+        });
+
         progress = new ProgressModel({
             user: userId,
             course: courseId,
-            totalLessons: course.courseData.length,
+            totalLessons,
             totalCompleted: 0,
             completedLessons: []
         });
     }
 
-    // Kiểm tra xem section đã tồn tại trong Progress chưa
-    let sectionProgress = progress.completedLessons.find(
-        (s: { section: { name: string } }) => s.section.name === sectionName
-    );
+    // Tìm hoặc tạo section progress
+    let sectionProgress = progress.completedLessons.find((s: any) => s.section.name === sectionTitle);
 
     if (!sectionProgress) {
         sectionProgress = {
             section: {
-                name: sectionName,
-                sectionLength: course.courseData.filter((s: { videoSection: string }) => s.videoSection === sectionName)
-                    .length,
-                lessons: []
+                name: sectionTitle,
+                sectionLength,
+                lessons: [],
+                totalCompletedPerSection: 0
             }
         };
         progress.completedLessons.push(sectionProgress);
     }
 
-    // Kiểm tra xem lesson đã tồn tại trong section chưa
     const lessonIndex = sectionProgress.section.lessons.findIndex((l: any) => l.toString() === lessonId);
 
     if (isCompleted) {
-        // Nếu đánh dấu hoàn thành mà bài học chưa có trong danh sách, thì thêm vào
         if (lessonIndex === -1) {
             sectionProgress.section.lessons.push(lessonId);
         }
     } else {
-        // Nếu bỏ đánh dấu hoàn thành, thì xóa khỏi danh sách
         if (lessonIndex !== -1) {
             sectionProgress.section.lessons.splice(lessonIndex, 1);
         }
     }
+    await LessonModel.findByIdAndUpdate(lessonId, { isCompleted }, { new: true });
 
-    // Cập nhật tổng số bài học đã hoàn thành trong từng section
     sectionProgress.section.totalCompletedPerSection = sectionProgress.section.lessons.length;
 
-    // Cập nhật tổng số bài học đã hoàn thành trên toàn bộ khóa học
     progress.totalCompleted = progress.completedLessons.reduce(
-        (sum: number, sec: { section: { lessons: any[] } }) => sum + sec.section.lessons.length,
+        (sum: any, sec: any) => sum + (sec.section.lessons?.length || 0),
         0
     );
 
-    // Lưu vào database
     await progress.save();
 
-    // Cập nhật redis cache
     await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
 
     res.status(200).json({

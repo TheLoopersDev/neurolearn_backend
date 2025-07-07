@@ -32,6 +32,7 @@ import {
     getAllUploadedAndPurchasedCoursesOfInstructor,
     getAllPurchasedCoursesOfUser,
     getCoursesWithSort,
+    getSingleCourseFullDetail,
     getCourseById
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
@@ -261,6 +262,25 @@ router.post('/search', searchCoursesAndInstructors);
  */
 router.get('/top-courses', getTopCourses);
 
+/**
+ * @swagger
+ * /api/courses/course-data/{id}:
+ *   get:
+ *     summary: Get course by ID
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course details
+ *       404:
+ *         description: Course not found
+ */
+router.get('/course-data/:id', getSingleCourseFullDetail);
 /**
  * @swagger
  * /api/courses/{id}:

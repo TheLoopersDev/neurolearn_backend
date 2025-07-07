@@ -4,6 +4,7 @@ import Order from '../models/Order.model';
 import User from '../models/User.model';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import CourseModel from '@/models/Course.model';
 
 dotenv.config();
 
@@ -86,7 +87,13 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             user.purchasedCourses.push(...courseIds);
             await user.save();
 
-            console.log('✅ Đã thêm courseIds vào purchasedCourses');
+            await Promise.all(
+                courseIds.map(async (courseId : any) => {
+                    await CourseModel.findByIdAndUpdate(courseId, {
+                        $inc: { purchased: 1 }
+                    });
+                })
+            );
         }
 
         res.sendStatus(200);

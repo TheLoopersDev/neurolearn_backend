@@ -1476,3 +1476,97 @@ export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res:
         }
     });
 });
+
+//get single course by id
+export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.id;
+
+    if (!courseId) {
+        return next(new ErrorHandler('Please provide course id', 400));
+    }
+
+    const course = await CourseModel.findById(courseId)
+        .populate([
+            { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
+            { path: 'level', select: 'name' },
+            { path: 'category', select: 'name' },
+            { path: 'subCategory', select: 'name' }
+        ])
+
+    if (!course) {
+        return next(new ErrorHandler('Course not found', 404));
+    }
+
+    // Populate Sections từ Course
+    const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
+        .sort({ order: 1 })
+        .populate({
+            path: 'lessons',
+            match: { isPublished: true },
+            options: { sort: { order: 1 } }
+        })
+        .lean();
+
+    // Xử lý ẩn video nếu không miễn phí
+    const processedSections = sections.map((section) => ({
+        ...section,
+        lessons: Array.isArray(section.lessons)
+            ? section.lessons.map((lesson) => ({
+                  ...lesson,
+                  videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+              }))
+            : []
+    }));
+
+    const totalLessons = processedSections.reduce(
+        (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
+        0
+    );
+
+    // Tổng học sinh
+    const instructorCourseIds = course.authorId?.uploadedCourses || [];
+    const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
+    const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
+
+    const totalCourses = instructorCourseIds.length;
+
+    const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
+    const hours = Math.floor(durationInMinutes / 60);
+    const minutes = durationInMinutes % 60;
+    const durationText = `${hours}h ${minutes}m`;
+
+    return res.status(200).json({
+        success: true,
+        course: {
+            _id: course._id,
+            name: course.name,
+            subTitle: course.subTitle,
+            description: course.description,
+            thumbnail: course.thumbnail,
+            demoUrl: course.demoUrl,
+            price: course.price,
+            estimatedPrice: course.estimatedPrice,
+            isFree: course.isFree,
+            purchased: course.purchased ?? 0,
+            level: course.level?.name ?? null,
+            rating: course.rating ?? 0,
+            category: course.category,
+            subCategory: course.subCategory,
+            overview: course.overview || '',
+            topics: Array.isArray(course.topics) ? course.topics : [],
+            totalLessons,
+            durationText,
+            sections: processedSections,
+            publisher: {
+                name: course.authorId?.name || '',
+                avatar: course.authorId?.avatar || '',
+                email: course.authorId?.email || '',
+                profession: course.authorId?.profession || '',
+                description: course.authorId?.introduce || '',
+                rating: course.rating ?? 0,
+                students: totalStudents,
+                courses: totalCourses
+            }
+        }
+    });
+});
