@@ -13,10 +13,10 @@ export const createCourse = async (data: any, req: Request, res: Response, next:
     // Gán authorId từ user đang login
     data.authorId = user._id;
 
-    const course = await CourseModel.create(data);
+    const courses = await CourseModel.create(data);
 
     // Gán courseId vào uploadedCourses[]
-    user.uploadedCourses.push(course._id);
+    user.uploadedCourses.push(courses._id);
     await user.save();
 
     // Cập nhật Redis cache
@@ -24,7 +24,7 @@ export const createCourse = async (data: any, req: Request, res: Response, next:
 
     res.status(201).json({
         success: true,
-        course
+        courses
     });
 };
 
