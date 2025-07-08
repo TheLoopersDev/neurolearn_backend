@@ -7,7 +7,8 @@ import sendMail from '../utils/sendMail';
 import XLSX from 'xlsx';
 import fs from 'fs';
 import CourseModel from '../models/Course.model';
-
+import ProgressModel from '../models/Progress.model';
+import cron from 'node-cron';
 //add employee by email
 export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { businessId } = req.params;
@@ -201,3 +202,71 @@ export const getBusinessById = catchAsync(async (req: Request, res: Response, ne
         business
     });
 });
+
+export const checkEmployeeProgressDaily = () => {
+    cron.schedule('* 7 * * *', async () => {
+        const users = await UserModel.find({
+            assignedCourses: { $exists: true, $ne: [] }
+        });
+
+        for (const user of users) {
+            const behindCourses: string[] = [];
+
+            let isUpdated = false;
+
+            for (const assigned of user.assignedCourses) {
+                const { course, startDate, dueDate } = assigned;
+
+                if (!course || !startDate || !dueDate) continue;
+
+                const progress = await ProgressModel.findOne({
+                    user: user._id,
+                    course
+                });
+
+                if (!progress || progress.totalLessons === 0) continue;
+
+                const now = new Date();
+                const totalTime = new Date(dueDate).getTime() - new Date(startDate).getTime();
+                const elapsedTime = now.getTime() - new Date(startDate).getTime();
+
+                const timeProgress = Math.min((elapsedTime / totalTime) * 100, 100);
+                const learningProgress = (progress.totalCompleted / progress.totalLessons) * 100;
+
+                // Cập nhật status
+                if (progress.totalCompleted === 0 && now <= new Date(dueDate)) {
+                    assigned.status = 'not_started';
+                } else if (progress.totalCompleted === progress.totalLessons) {
+                    assigned.status = 'completed';
+                } else if (progress.totalCompleted > 0 && now <= new Date(dueDate)) {
+                    assigned.status = 'in_progress';
+                }
+
+                isUpdated = true;
+
+                // Kiểm tra nếu đang trễ tiến độ
+                const isBehind = learningProgress < timeProgress;
+                if (isBehind) {
+                    const courseDoc = await CourseModel.findById(course);
+                    behindCourses.push(courseDoc?.name || 'Khóa học không xác định');
+                }
+            }
+
+            if (isUpdated) {
+                await user.save();
+            }
+
+            if (behindCourses.length > 0) {
+                await sendMail({
+                    email: user.email,
+                    subject: `Your course progress is behind schedule`,
+                    template: 'progress-warning.ejs',
+                    data: {
+                        user: { name: user.name },
+                        courses: behindCourses
+                    }
+                });
+            }
+        }
+    });
+};
