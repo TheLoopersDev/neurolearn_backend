@@ -17,8 +17,11 @@ import './middlewares/errors/unhandledRejection';
 // Import Routes
 import api from './api';
 import { payosWebhook } from './controllers/payment.controller';
+import { checkEmployeeProgressDaily } from './controllers/business.controller';
 
 const app = express();
+
+checkEmployeeProgressDaily();
 
 dotenv.config();
 
@@ -44,10 +47,7 @@ const allowedOrigins = Array.from(
 // cors
 app.use(
     cors({
-        origin: function (
-            origin: string | undefined,
-            callback: (err: Error | null, allow?: boolean) => void
-        ) {
+        origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
             if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
@@ -56,10 +56,9 @@ app.use(
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
     })
 );
-
 
 // Limit requests from same API
 const limiter = rateLimit({
