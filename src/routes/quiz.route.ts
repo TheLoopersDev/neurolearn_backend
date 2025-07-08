@@ -1,18 +1,17 @@
 import express from 'express';
 import {
-    getQuizbyId,
     createQuiz,
     getAllQuizzes,
     updateQuiz,
     deleteQuiz,
-    getQuizzesByCourse,
-    getQuizzesBySection,
     submitQuiz,
     createQuestion,
     deleteQuestion,
     getAllQuestions,
     getQuestionById,
-    updateQuestionInQuiz
+    getQuizById,
+    updateQuestion,
+    reorderQuestion
 } from '../controllers/quiz.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
@@ -96,22 +95,16 @@ router.post('/', updateAccessToken, isAuthenticated, createQuiz);
  *       404:
  *         description: Quiz not found
  */
-router.get('/:id', updateAccessToken, isAuthenticated, getQuizbyId);
+router.get('/:id', updateAccessToken, isAuthenticated, getQuizById);
 
 // GET /api/quizzes - Fetch all quizzes (without pagination)
-router.get('/', getAllQuizzes);
-
-// GET /api/quizzes/course/:courseId - Fetch quizzes by course
-router.get('/course/:courseId', getQuizzesByCourse);
+router.get('/', updateAccessToken, isAuthenticated, getAllQuizzes);
 
 // PUT /api/quizzes/:quizId - Update a quiz
-router.put('/:id', updateQuiz);
+router.put('/:id', updateAccessToken, isAuthenticated, updateQuiz);
 
 // DELETE /api/quizzes/:quizId - Delete a quiz
-router.delete('/:id', deleteQuiz);
-
-// GET /api/quizzes/section/:videoSection - Fetch quizzes by videoSection
-router.get('/section/:videoSection', getQuizzesBySection);
+router.delete('/:id', updateAccessToken, isAuthenticated, deleteQuiz);
 
 /**
  * @swagger
@@ -158,14 +151,16 @@ router.get('/section/:videoSection', getQuizzesBySection);
  */
 router.post('/:id/submit', updateAccessToken, isAuthenticated, submitQuiz);
 
-router.get('/:id/questions/:questionId', getQuestionById);
+router.get('/:id/questions/:questionId', updateAccessToken, isAuthenticated, getQuestionById);
 
-router.get('/:id/questions', getAllQuestions);
+router.get('/:id/questions', updateAccessToken, isAuthenticated, getAllQuestions);
 
-router.post('/:id/questions', createQuestion);
+router.post('/:id/questions', updateAccessToken, isAuthenticated, createQuestion);
 
-router.put('/:id/questions/:questionId', updateQuestionInQuiz);
+router.put('/:id/questions/:questionNumber', updateAccessToken, isAuthenticated, updateQuestion);
 
-router.delete('/:id/questions/:questionId', deleteQuestion);
+router.put('/:id/questions/reorder', updateAccessToken, isAuthenticated, reorderQuestion);
+
+router.delete('/:id/questions/:questionNumber', updateAccessToken, isAuthenticated, deleteQuestion);
 
 export = router;

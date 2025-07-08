@@ -19,7 +19,6 @@ import {
     searchCoursesAndInstructors,
     getUploadedCourseByInstructor,
     updateLesson,
-    uploadLessonVideo,
     generateVideoCloudinarySignature,
     getSignatureForDelete,
     deleteLesson,
@@ -33,7 +32,8 @@ import {
     getAllUploadedAndPurchasedCoursesOfInstructor,
     getAllPurchasedCoursesOfUser,
     getCoursesWithSort,
-    getSingleCourseFullDetail
+    getSingleCourseFullDetail,
+    getCourseById
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -311,6 +311,9 @@ router.get('/:id', getSingleCourse);
  *       200:
  *         description: List of all courses
  */
+
+router.get('/course/:id', getCourseById);
+
 router.get('/', getAllCoursesWithoutPurchase);
 
 /**
@@ -904,46 +907,6 @@ router.put('/unpublish-section/:id', updateAccessToken, isAuthenticated, unpubli
  *         description: Not authenticated
  */
 router.put('/delete-section/:id', updateAccessToken, isAuthenticated, deleteSection);
-
-/**
- * @swagger
- * /api/courses/upload-lesson-video/{id}:
- *   put:
- *     summary: Upload lesson video
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required:
- *               - sectionId
- *               - lessonId
- *               - video
- *             properties:
- *               sectionId:
- *                 type: string
- *               lessonId:
- *                 type: string
- *               video:
- *                 type: string
- *                 format: binary
- *     responses:
- *       200:
- *         description: Video uploaded successfully
- *       401:
- *         description: Not authenticated
- */
-router.put('/upload-lesson-video/:id', updateAccessToken, isAuthenticated, uploadLessonVideo);
 
 /**
  * @swagger
