@@ -104,7 +104,7 @@ export const createOrder = catchAsync(async (req: Request, res: Response, next: 
     await user.save();
     // Update Redis cache
     if (req.user?._id) {
-        await redis.set(req.user._id, JSON.stringify(user));
+        await redis.set(req.user._id.toString(), JSON.stringify(user));
     }
 
     // Save user

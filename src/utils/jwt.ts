@@ -12,8 +12,8 @@ interface ITokenOptions {
 }
 
 // Parse environment variables with fallback values
-const accessTokenExpire = parseInt(process.env.ACCESS_TOKEN_EXPIRE || '300', 10);
-const refreshTokenExpire = parseInt(process.env.REFRESH_TOKEN_EXPIRE || '1200', 10);
+const accessTokenExpire = parseInt(process.env.ACCESS_TOKEN_EXPIRE || '3000', 10);
+const refreshTokenExpire = parseInt(process.env.REFRESH_TOKEN_EXPIRE || '12000', 10);
 
 // Options for cookies
 export const accessTokenOptions: ITokenOptions = {
@@ -45,7 +45,9 @@ export const sendToken = (user: UserT, statusCode: number, res: Response) => {
         throw new Error('User ID is missing');
     }
 
-    redis.set(user._id.toString(), JSON.stringify(user));
+    // Ensure user ID is stored as string in Redis
+    const userId = user._id.toString();
+    redis.set(userId, JSON.stringify(user));
 
     // Set cookies
     res.cookie('access_token', accessToken, accessTokenOptions);

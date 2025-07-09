@@ -14,8 +14,12 @@ import creditCardRoutes from '../routes/creditCard.route';
 import requestRoutes from '../routes/request.route';
 import sectionRoutes from '../routes/section.route';
 import lessonRoutes from '../routes/lesson.route';
+import withdrawRoutes from '../routes/withdraw.route';
+import revenueRoutes from '../routes/revenue.route';
 import businessRoutes from '../routes/business.route';
 import cartRoutes from '../routes/cart.route';
+
+import chatRoutes from '../routes/chat.route';
 
 const router = express.Router();
 
@@ -49,7 +53,12 @@ router.use('/credit-cards', creditCardRoutes);
 
 router.use('/request', requestRoutes);
 
+router.use('/withdraw', withdrawRoutes);
+
+router.use('/revenue', revenueRoutes);
+
 router.use('/business', businessRoutes);
+router.use('/chats', chatRoutes);
 
 router.use('/cart', cartRoutes);
 

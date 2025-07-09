@@ -2,33 +2,65 @@ import { Request, Response, NextFunction } from 'express';
 import CreditCard from '../models/CreditCard.model';
 import ErrorHandler from '../utils/ErrorHandler';
 import { catchAsync } from '../utils/catchAsync';
-import { getCreditCardByAccountNumber, getCreditCardByUserId, createCreditCardForUser } from '../services/creditCard.service';
+import { getCreditCardByAccountNumber, getCreditCardByUserId, createCreditCardForUser, getBankInfoFromMoMo } from '../services/creditCard.service';
 
 // Create credit card for current instructor
 export const createCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('Not authorized', 401));
+    return next(new ErrorHandler('User not authenticated', 401));
   }
 
-  const creditCard = await createCreditCardForUser(req.user._id, req.body);
+  const userId = req.user._id.toString();
+  const creditCard = await createCreditCardForUser(userId, req.body);
   
   return res.status(201).json({
     success: true,
-    data: creditCard,
+    creditCard,
   });
 });
 
 // Get credit card of current instructor
 export const getCurrentUserCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('Not authorized', 401));
+    return next(new ErrorHandler('User not authenticated', 401));
   }
 
-  const creditCard = await getCreditCardByUserId(req.user._id);
-  
+  const userId = req.user._id.toString();
+  const creditCard = await getCreditCardByUserId(userId);
+
+  // Lấy danh sách bank từ API vietqr
+  let bankList: any[] = [];
+  try {
+    const axios = require('axios');
+    const response = await axios.get('https://api.vietqr.io/v2/banks');
+    if (response.data && response.data.data) {
+      bankList = response.data.data;
+    }
+  } catch (e) {
+    // Nếu lỗi, bỏ qua, không thêm logo
+  }
+
+  // Tìm bank theo cardType (so sánh với shortName hoặc code)
+  let logo = null;
+  let shortName = creditCard.cardType;
+  if (bankList.length > 0) {
+    const found = bankList.find(
+      (b: any) => b.shortName?.toLowerCase() === creditCard.cardType?.toLowerCase() || b.code?.toLowerCase() === creditCard.cardType?.toLowerCase()
+    );
+    if (found) {
+      logo = found.logo;
+      shortName = found.shortName;
+    }
+  }
+
+  // Trả về dữ liệu bổ sung
   return res.status(200).json({
     success: true,
-    data: creditCard,
+    data: {
+      ...creditCard.toObject(),
+      logo,
+      cardType: shortName,
+    },
   });
 });
 
@@ -47,11 +79,12 @@ export const getCreditCardByAccountNumberController = catchAsync(async (req: Req
 // Update current user's credit card
 export const updateCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('Not authorized', 401));
+    return next(new ErrorHandler('User not authenticated', 401));
   }
 
+  const userId = req.user._id.toString();
   const creditCard = await CreditCard.findOneAndUpdate(
-    { user: req.user._id },
+    { user: userId },
     req.body,
     {
       new: true,
@@ -65,17 +98,18 @@ export const updateCreditCard = catchAsync(async (req: Request, res: Response, n
 
   return res.status(200).json({
     success: true,
-    data: creditCard,
+    creditCard,
   });
 });
 
 // Delete current user's credit card
 export const deleteCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('Not authorized', 401));
+    return next(new ErrorHandler('User not authenticated', 401));
   }
 
-  const creditCard = await CreditCard.findOneAndDelete({ user: req.user._id });
+  const userId = req.user._id.toString();
+  const creditCard = await CreditCard.findOneAndDelete({ user: userId });
   
   if (!creditCard) {
     return next(new ErrorHandler('Credit card not found', 404));
@@ -83,6 +117,14 @@ export const deleteCreditCard = catchAsync(async (req: Request, res: Response, n
 
   return res.status(200).json({
     success: true,
-    data: {},
+    message: 'Credit card deleted successfully',
+  });
+});
+
+export const getBankInfo = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const data = await getBankInfoFromMoMo();
+  return res.status(200).json({
+    success: true,
+    data,
   });
 }); 

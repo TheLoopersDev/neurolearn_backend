@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import CreditCard from '../models/CreditCard.model';
 import ErrorHandler from '../utils/ErrorHandler';
+import axios from 'axios';
 
 export const getCreditCardByAccountNumber = async (accountNumber: string) => {
   const creditCard = await CreditCard.findOne({ accountNumber }).populate('user', 'name email');
@@ -44,4 +45,10 @@ export const createCreditCardForUser = async (
   });
 
   return creditCard;
+};
+
+export const getBankInfoFromMoMo = async () => {
+  const url = 'https://api.vietqr.io/v2/banks';
+  const response = await axios.get(url);
+  return response.data;
 }; 

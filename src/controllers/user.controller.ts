@@ -271,7 +271,7 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
     const user = JSON.parse(session);
 
     const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, {
-        expiresIn: '1m'
+        expiresIn: '1h'
     });
     const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, {
         expiresIn: '3d'
@@ -415,7 +415,7 @@ export const getUserInfo = catchAsync(async (req: Request, res: Response, next: 
         return next(new ErrorHandler('User not authenticated', 500));
     }
 
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
     getUserById(userId, res);
 });
 
