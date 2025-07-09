@@ -1,5 +1,5 @@
 import express from 'express';
-import { createChat, sendMessage, getUserChats, getChatById, getUserInfoForChat, getAllUsersForChat } from '../controllers/chat.controller';
+import { createChat, sendMessage, getUserChats, getChatById, getUserInfoForChat, getAllUsersForChat, getRelatedUsersForChat } from '../controllers/chat.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 
 const router = express.Router();
@@ -90,6 +90,25 @@ router.get('/user/:userId', getUserChats);
  *         description: User not found
  */
 router.get('/user-info/:userId', getUserInfoForChat);
+
+/**
+ * @swagger
+ * /api/chats/related-users:
+ *   get:
+ *     summary: Lấy danh sách user liên quan đến các phòng chat của user hiện tại
+ *     tags: [Chat]
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: ID của user (nếu không dùng session)
+ *     responses:
+ *       200:
+ *         description: Danh sách user liên quan
+ */
+router.get('/related-users', getRelatedUsersForChat);
 
 /**
  * @swagger

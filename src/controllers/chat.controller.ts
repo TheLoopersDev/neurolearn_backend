@@ -74,4 +74,31 @@ export const getAllUsersForChat = catchAsync(async (req: Request, res: Response)
       message: 'Internal server error' 
     });
   }
+});
+
+export const getRelatedUsersForChat = catchAsync(async (req: Request, res: Response) => {
+  // Lấy userId từ query hoặc từ req.user nếu có middleware auth
+  const userId = req.query.userId as string || (req as any).user?._id;
+  if (!userId || !Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ success: false, message: 'Missing or invalid userId' });
+  }
+
+  // Lấy tất cả chat room mà user này tham gia
+  const chats = await chatService.getUserChats(new Types.ObjectId(userId));
+  // Lấy tất cả userId xuất hiện trong các trường members
+  const userIdSet = new Set<string>();
+  chats.forEach((chat: any) => {
+    chat.members.forEach((member: any) => {
+      userIdSet.add(member._id.toString());
+    });
+  });
+  // Xóa userId hiện tại khỏi danh sách nếu muốn (nếu FE không cần chính mình)
+  // userIdSet.delete(userId);
+  // Truy vấn bảng user để lấy thông tin chi tiết
+  const users = await getAllUsersForChatService();
+  const relatedUsers = users.filter((user: any) => userIdSet.has(user._id.toString()));
+  res.status(200).json({
+    success: true,
+    users: relatedUsers
+  });
 }); 
