@@ -4,43 +4,33 @@ import { Response } from 'express';
 
 export const getUserById = async (id: string, res: Response) => {
     try {
-        const user = await UserModel.findById(id);
-
+        const userId = id.toString();
+        // Check Redis cache first
+        const userJSON = await redis.get(userId);
+        if (userJSON) {
+            const user = JSON.parse(userJSON);
+            return res.status(200).json({
+                success: true,
+                user
+            });
+        }
+        // If not in cache, get from DB
+        const user = await UserModel.findById(userId);
         if (!user) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
-
-        res.status(200).json({
+        // Cache user in Redis
+        await redis.set(userId, JSON.stringify(user));
+        return res.status(200).json({
             success: true,
             user
-        // Ensure id is a string
-        const userId = id.toString();
-        const userJSON = await redis.get(userId);
-
-        if (userJSON) {
-            const user = JSON.parse(userJSON);
-            res.status(200).json({
-                success: true,
-                user
-            });
-        } else {
-            res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-    } catch (error) {
-        console.error('Error in getUserById:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
         });
     } catch (error) {
-        console.error('Error fetching user:', error);
-        res.status(500).json({
+        console.error('Error in getUserById:', error);
+        return res.status(500).json({
             success: false,
             message: 'Internal server error'
         });
