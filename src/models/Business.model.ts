@@ -33,8 +33,16 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
         ],
         courses: [
             {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Course'
+                course: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'Course',
+                    required: true
+                },
+                totalLicenses: {
+                    type: Number,
+                    required: true,
+                    default: 0
+                }
             }
         ],
         isVerified: {

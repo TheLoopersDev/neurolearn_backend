@@ -3,12 +3,16 @@ import {
     addEmployeeByEmail,
     assignCourseToEmployee,
     getBusinessById,
-    importEmployeesFromExcel
+    getEmployeeList,
+    getEmployeesInBusiness,
+    importEmployeesFromExcel,
+    removeEmployeeFromBusiness,
+    upgradeEmployeeRole
 } from '../controllers/business.controller';
-import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
-import { updateAccessToken } from '@/controllers/user.controller';
-import { authorizeBusinessRoles } from '@/middlewares/auth/authorizeRoles';
-import upload from '@/utils/upload';
+import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
+import { updateAccessToken } from '../controllers/user.controller';
+import { authorizeBusinessRoles } from '../middlewares/auth/authorizeRoles';
+import upload from '../utils/upload';
 
 const router = express.Router();
 
@@ -246,6 +250,212 @@ router.get(
     isAuthenticated,
     authorizeBusinessRoles('admin', 'manager'),
     getBusinessById
+);
+
+/**
+ * @swagger
+ * /api/business/{businessId}/employees:
+ *   get:
+ *     summary: Get list of employees (role = employee) in the business
+ *     tags: [Business]
+ *     parameters:
+ *       - in: path
+ *         name: businessId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the business
+ *     responses:
+ *       200:
+ *         description: List of employees retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 employees:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       user:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           avatar:
+ *                             type: string
+ *                       role:
+ *                         type: string
+ *                         example: employee
+ *       404:
+ *         description: Business not found
+ */
+router.get(
+    '/:businessId/employees',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    getEmployeeList
+);
+
+/**
+ * @swagger
+ * /api/business/{businessId}/employees/{employeeId}/up-role:
+ *   put:
+ *     summary: Promote an employee to manager (admin only)
+ *     tags: [Business]
+ *     parameters:
+ *       - in: path
+ *         name: businessId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the business
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the employee to upgrade
+ *     responses:
+ *       200:
+ *         description: Role upgraded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Employee role updated to manager
+ *       400:
+ *         description: Already a manager or invalid data
+ *       404:
+ *         description: Business or employee not found
+ *       403:
+ *         description: Forbidden - only admin can perform this action
+ */
+router.put(
+    '/:businessId/employees/:employeeId/up-role',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin'),
+    upgradeEmployeeRole
+);
+
+/**
+ * @swagger
+ * /api/business/{businessId}/visible-employees:
+ *   get:
+ *     summary: Get list of employees visible to current user (admin sees manager + employee, manager sees employee)
+ *     tags: [Business]
+ *     parameters:
+ *       - in: path
+ *         name: businessId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the business
+ *     responses:
+ *       200:
+ *         description: List of visible employees retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 employees:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       user:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           avatar:
+ *                             type: string
+ *                       role:
+ *                         type: string
+ *                         example: employee
+ *       403:
+ *         description: Forbidden - user has no access
+ *       404:
+ *         description: Business not found
+ */
+router.get(
+    '/:businessId/visible-employees',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    getEmployeesInBusiness
+);
+
+/**
+ * @swagger
+ * /api/business/{businessId}/employees/{employeeId}:
+ *   delete:
+ *     summary: Remove an employee from a business (admin can remove manager/employee, manager can remove employee)
+ *     tags: [Business]
+ *     parameters:
+ *       - in: path
+ *         name: businessId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the business
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the employee to remove
+ *     responses:
+ *       200:
+ *         description: Employee removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Employee removed from business successfully
+ *       400:
+ *         description: Cannot remove yourself or invalid request
+ *       403:
+ *         description: You do not have permission to remove this employee
+ *       404:
+ *         description: Business or employee not found
+ */
+router.delete(
+    '/:businessId/employees/:employeeId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    removeEmployeeFromBusiness
 );
 
 export default router;

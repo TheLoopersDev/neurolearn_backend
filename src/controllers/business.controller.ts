@@ -152,11 +152,21 @@ export const assignCourseToEmployee = catchAsync(async (req: Request, res: Respo
     if (!employee) return next(new ErrorHandler('Employee not found', 404));
 
     const isAlreadyAssigned = employee.assignedCourses.some((c: any) => c.course.toString() === courseId);
-
     if (isAlreadyAssigned) {
         return next(new ErrorHandler('Course already assigned to this employee', 400));
     }
 
+    // 🔍 Tìm khóa học trong danh sách business.courses
+    const businessCourse = business.courses.find((c: any) => c.course.toString() === courseId);
+    if (!businessCourse) {
+        return next(new ErrorHandler('Course not purchased by business', 400));
+    }
+
+    if (businessCourse.totalLicenses <= 0) {
+        return next(new ErrorHandler('No available license for this course', 400));
+    }
+
+    // ✅ Gán course cho employee
     employee.assignedCourses.push({
         course: course._id,
         startDate,
@@ -166,6 +176,11 @@ export const assignCourseToEmployee = catchAsync(async (req: Request, res: Respo
 
     await employee.save();
 
+    // ✅ Trừ license
+    businessCourse.totalLicenses -= 1;
+    await business.save();
+
+    // ✅ Gửi mail
     await sendMail({
         email: employee.email,
         subject: `You’ve been assigned a new course: ${course.title}`,
@@ -270,3 +285,141 @@ export const checkEmployeeProgressDaily = () => {
         }
     });
 };
+
+// GET list employees of a business
+export const getEmployeeList = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId } = req.params;
+
+    const business = await BusinessModel.findById(businessId).populate('employees.user', 'name email avatar');
+    if (!business) return next(new ErrorHandler('Business not found', 404));
+
+    const employeeList = business.employees.filter((emp: any) => emp.role === 'employee');
+
+    res.status(200).json({
+        success: true,
+        employees: employeeList
+    });
+});
+
+// PUT update role of an employee to manager
+export const upgradeEmployeeRole = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId, employeeId } = req.params;
+
+    const business = await BusinessModel.findById(businessId);
+    if (!business) return next(new ErrorHandler('Business not found', 404));
+
+    const employee = business.employees.find((emp: any) => emp.user.toString() === employeeId);
+    if (!employee) return next(new ErrorHandler('Employee not found in this business', 404));
+
+    if (employee.role === 'manager') {
+        return next(new ErrorHandler('User is already a manager', 400));
+    }
+
+    employee.role = 'manager';
+
+    const user = await UserModel.findById(employeeId);
+    if (user && user.businessInfo && user.businessInfo.businessId.toString() === businessId) {
+        user.businessInfo.role = 'manager';
+        await user.save();
+    }
+
+    await business.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Employee role updated to manager'
+    });
+});
+
+// Get list employee
+export const getEmployeesInBusiness = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId } = req.params;
+    const currentUserId = req.user?._id;
+
+    if (!currentUserId) {
+        return next(new ErrorHandler('Unauthorized', 401));
+    }
+
+    const business = await BusinessModel.findById(businessId).populate('employees.user', 'name email avatar');
+
+    if (!business) {
+        return next(new ErrorHandler('Business not found', 404));
+    }
+
+    const currentUser = business.employees.find((emp: any) => emp.user._id.toString() === currentUserId.toString());
+
+    if (!currentUser) {
+        return next(new ErrorHandler('You are not part of this business', 403));
+    }
+
+    let allowedRolesToView: string[] = [];
+
+    if (currentUser.role === 'admin') {
+        allowedRolesToView = ['manager', 'employee'];
+    } else if (currentUser.role === 'manager') {
+        allowedRolesToView = ['employee'];
+    } else {
+        return next(new ErrorHandler('You do not have permission to view this data', 403));
+    }
+
+    const filteredEmployees = business.employees.filter((emp: any) => allowedRolesToView.includes(emp.role));
+
+    res.status(200).json({
+        success: true,
+        employees: filteredEmployees
+    });
+});
+
+// remove employee from business
+export const removeEmployeeFromBusiness = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId, employeeId } = req.params;
+    const currentUserId = req.user?._id;
+
+    if (!currentUserId) {
+        return next(new ErrorHandler('Unauthorized', 401));
+    }
+
+    const business = await BusinessModel.findById(businessId);
+
+    if (!business) {
+        return next(new ErrorHandler('Business not found', 404));
+    }
+
+    const currentUser = business.employees.find((emp: any) => emp.user.toString() === currentUserId.toString());
+    if (!currentUser) {
+        return next(new ErrorHandler('You are not a member of this business', 403));
+    }
+
+    const employeeToRemove = business.employees.find((emp: any) => emp.user.toString() === employeeId);
+    if (!employeeToRemove) {
+        return next(new ErrorHandler('Employee not found in this business', 404));
+    }
+
+    if (employeeId === currentUserId.toString()) {
+        return next(new ErrorHandler('You cannot remove yourself', 400));
+    }
+
+    // Kiểm tra quyền xóa
+    const canRemove =
+        (currentUser.role === 'admin' && employeeToRemove.role !== 'admin') ||
+        (currentUser.role === 'manager' && employeeToRemove.role === 'employee');
+
+    if (!canRemove) {
+        return next(new ErrorHandler('You do not have permission to remove this employee', 403));
+    }
+
+    // ✅ Xóa nhân viên khỏi business.employees
+    business.employees = business.employees.filter((emp: any) => emp.user.toString() !== employeeId);
+    await business.save();
+
+    // ✅ Cập nhật user: gỡ liên kết businessInfo nếu có
+    await UserModel.findByIdAndUpdate(employeeId, {
+        $unset: { businessInfo: '' }
+    });
+
+    res.status(200).json({
+        success: true,
+        message: 'Employee removed from business successfully'
+    });
+});
+  
