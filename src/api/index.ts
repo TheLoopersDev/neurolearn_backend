@@ -18,6 +18,7 @@ import withdrawRoutes from '../routes/withdraw.route';
 import revenueRoutes from '../routes/revenue.route';
 import businessRoutes from '../routes/business.route';
 import cartRoutes from '../routes/cart.route';
+import certificateRoutes from '../routes/certificate.route';
 
 import chatRoutes from '../routes/chat.route';
 
@@ -61,5 +62,7 @@ router.use('/business', businessRoutes);
 router.use('/chats', chatRoutes);
 
 router.use('/cart', cartRoutes);
+
+router.use('/certificate', certificateRoutes);
 
 export default router;

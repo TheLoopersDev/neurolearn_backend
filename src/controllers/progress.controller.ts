@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { catchAsync } from '../utils/catchAsync';
-import ErrorHandler from '../utils/ErrorHandler';
-import ProgressModel from '../models/Progress.model';
-import CourseModel from '../models/Course.model';
-import { redis } from '../utils/redis';
+import { catchAsync } from '@/utils/catchAsync';
+import ErrorHandler from '@/utils/ErrorHandler';
+import ProgressModel from '@/models/Progress.model';
+import CourseModel from '@/models/Course.model';
+import { redis } from '@/utils/redis';
 import LessonModel from '@/models/Lesson.model';
 import SectionModel from '@/models/Section.model';
+import UserModel from '@/models/User.model';
+import CertificateModel from '@/models/Certificate.model';
 
 // Update lesson completion status via Progress model
 export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -79,6 +81,12 @@ export const updateLessonCompletionStatus = catchAsync(async (req: Request, res:
     await progress.save();
 
     await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
+
+    // Check and issue certificate if completed
+    await issueCertificateIfCompleted(userId.toString(), courseId.toString(), {
+        totalCompleted: progress.totalCompleted,
+        totalLessons: progress.totalLessons
+    });
 
     res.status(200).json({
         success: true,
@@ -184,3 +192,28 @@ export const getAllCoursesProgress = catchAsync(async (req: Request, res: Respon
         data: progressData
     });
 });
+// Update certificate if completed
+export async function issueCertificateIfCompleted(
+  userId: string,
+  courseId: string,
+  progress: { totalCompleted: number; totalLessons: number }
+) {
+    if (progress.totalCompleted !== progress.totalLessons) return;
+  
+    const existing = await CertificateModel.findOne({ user: userId, course: courseId });
+    if (existing) return;
+  
+    const user = await UserModel.findById(userId);
+    const course = await CourseModel.findById(courseId);
+    if (!user || !course) return;
+  
+    await CertificateModel.create({
+      user: user._id,
+      course: course._id,
+      userName: user.name,
+      courseName: course.name,
+      completedAt: new Date(),
+      issuedBy: 'system',
+    });
+  };
+
