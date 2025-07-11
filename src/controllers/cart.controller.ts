@@ -2,33 +2,51 @@ import { Request, Response, NextFunction } from 'express';
 import { CartModel } from '../models/Cart.model';
 import ErrorHandler from '../utils/ErrorHandler';
 
-export const addToCart = async (req: Request, res: Response, next: NextFunction) => {
-    const { courseId, quantity } = req.body;
+export const addToCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { courseId } = req.body;
     const userId = req.user?._id;
+    const businessRole = req.user?.businessInfo?.role;
 
     if (!userId) {
-        return next(new ErrorHandler('User not authenticated', 401));
+        next(new ErrorHandler('User not authenticated', 401));
+        return;
+    }
+
+    if (!courseId) {
+        next(new ErrorHandler('Course ID is required', 400));
+        return;
     }
 
     try {
-        const cart = await CartModel.findOne({ userId });
+        const isBusiness = ['admin', 'manager'].includes(businessRole);
+        const quantityToAdd = 1;
 
-        if (cart) {
-            const courseIndex = cart.items.findIndex(
-                (item: { courseId: { toString: () => any } }) => item.courseId.toString() === courseId
-            );
-            if (courseIndex >= 0) {
-                cart.items[courseIndex].quantity += quantity;
-            } else {
-                cart.items.push({ courseId, quantity });
-            }
+        let cart = await CartModel.findOne({ userId });
+
+        if (!cart) {
+            cart = new CartModel({
+                userId,
+                items: [{ courseId, quantity: quantityToAdd }]
+            });
             await cart.save();
         } else {
-            const newCart = new CartModel({
-                userId,
-                items: [{ courseId, quantity }]
-            });
-            await newCart.save();
+            const existingItem = cart.items.find((item: any) => item.courseId.toString() === courseId.toString());
+
+            if (existingItem) {
+                if (isBusiness) {
+                    existingItem.quantity += quantityToAdd;
+                } else {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Course already in cart'
+                    });
+                    return;
+                }
+            } else {
+                cart.items.push({ courseId, quantity: quantityToAdd });
+            }
+
+            await cart.save();
         }
 
         res.status(201).json({ success: true, message: 'Added to cart successfully' });
@@ -59,23 +77,22 @@ export const removeCartItem = async (req: Request, res: Response, next: NextFunc
     const { courseId } = req.body;
     const userId = req.user?._id;
 
-    if (!userId) {
-        return next(new ErrorHandler('User not authenticated', 401));
-    }
+    if (!userId) return next(new ErrorHandler('User not authenticated', 401));
+    if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
 
     try {
         const cart = await CartModel.findOne({ userId });
-        if (!cart) {
-            return next(new ErrorHandler('Cart not found', 404));
-        }
-        const itemIndex = cart.items.filter((item: { courseId: string }) => item.courseId === courseId);
-        if (itemIndex >= 0) {
-            cart.items.splice(itemIndex, 1);
-            await cart.save();
-            res.status(200).json({ success: true, message: 'Item removed from cart' });
-        } else {
+        if (!cart) return next(new ErrorHandler('Cart not found', 404));
+
+        const initialLength = cart.items.length;
+        cart.items = cart.items.filter((item: any) => item.courseId.toString() !== courseId.toString());
+
+        if (cart.items.length === initialLength) {
             return next(new ErrorHandler('Item not found in cart', 404));
         }
+
+        await cart.save();
+        res.status(200).json({ success: true, message: 'Item removed from cart' });
     } catch (error) {
         next(error);
     }

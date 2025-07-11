@@ -1,4 +1,9 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
+
+export interface BusinessCourse {
+    course: mongoose.Types.ObjectId;
+    totalLicenses: number;
+}
 
 export interface BusinessT extends Document {
     _id: string;
@@ -9,11 +14,11 @@ export interface BusinessT extends Document {
     createdBy: Types.ObjectId;
 
     employees: {
-        user: Types.ObjectId; 
+        user: Types.ObjectId;
         position: 'admin' | 'manager' | 'employee';
     }[];
 
-    courses: Types.ObjectId[];
+    courses: BusinessCourse[];
 
     isVerified: boolean;
 

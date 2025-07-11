@@ -4,7 +4,8 @@ import Order from '../models/Order.model';
 import User from '../models/User.model';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import CourseModel from '@/models/Course.model';
+import CourseModel from '../models/Course.model';
+import BusinessModel from '../models/Business.model';
 
 dotenv.config();
 
@@ -12,7 +13,7 @@ const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL
 
 export const createPaymentLink = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { amount, description, courseIds, userId, webhookUrl } = req.body;
+        const { amount, description, courseIds, licenseQuantities, userId, webhookUrl } = req.body;
 
         if (!amount || !description || !Array.isArray(courseIds) || !userId) {
             res.status(400).json({ error: 'Missing require field' });
@@ -39,6 +40,7 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
         await Order.create({
             userId,
             courseIds: courseIds.map((id) => new mongoose.Types.ObjectId(id)),
+            licenseQuantities: licenseQuantities || [],
             payment_info: `PayOS`,
             orderCode,
             price: amount
@@ -53,9 +55,10 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
 export const payosWebhook = async (req: Request, res: Response): Promise<void> => {
     try {
-        const rawBody = req.body.toString('utf8'); // ✅ req.body là Buffer nếu dùng express.raw
+        const rawBody = req.body.toString('utf8');
         const signature = req.headers['x-signature'] as string;
 
+        // ✅ Uncomment nếu cần verify chữ ký
         // const isValid = verifyWebhookSignature(rawBody, signature);
         // if (!isValid) {
         //     console.warn('❌ Webhook bị giả mạo');
@@ -63,7 +66,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         //     return;
         // }
 
-        const webhookData = JSON.parse(rawBody); // ✅ parse lại JSON
+        const webhookData = JSON.parse(rawBody);
 
         if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
             const orderCode = webhookData.data.orderCode;
@@ -82,18 +85,51 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
                 return;
             }
 
-            // Push courseIds trực tiếp, không cần check
-            const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
-            user.purchasedCourses.push(...courseIds);
-            await user.save();
+            const role = user.businessInfo?.role;
+            const isBusiness = role === 'admin' || role === 'manager';
 
-            await Promise.all(
-                courseIds.map(async (courseId : any) => {
+            if (isBusiness) {
+                const business = await BusinessModel.findOne({ 'employees.user': user._id });
+                if (!business) {
+                    console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
+                    res.status(404).send('Business not found');
+                    return;
+                }
+
+                for (const item of order.licenseQuantities || []) {
+                    const courseId = new mongoose.Types.ObjectId(item.courseId);
+                    const quantity = item.quantity;
+
+                    const existingCourse = business.courses.find(
+                        (c: any) => c.course.toString() === courseId.toString()
+                    );
+
+                    if (existingCourse) {
+                        existingCourse.license += quantity;
+                    } else {
+                        business.courses.push({ course: courseId, license: quantity });
+                    }
+
                     await CourseModel.findByIdAndUpdate(courseId, {
-                        $inc: { purchased: 1 }
+                        $inc: { purchased: quantity }
                     });
-                })
-            );
+                }
+
+                await business.save();
+            } else {
+                const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
+
+                user.purchasedCourses.push(...courseIds);
+                await user.save();
+
+                await Promise.all(
+                    courseIds.map(async (courseId: any) => {
+                        await CourseModel.findByIdAndUpdate(courseId, {
+                            $inc: { purchased: 1 }
+                        });
+                    })
+                );
+            }
         }
 
         res.sendStatus(200);

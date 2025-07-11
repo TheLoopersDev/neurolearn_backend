@@ -15,6 +15,16 @@ const OrderSchema = new Schema<IOrder>(
             ref: 'User',
             required: true
         },
+        userType: {
+            type: String,
+            enum: ['user', 'business'],
+            required: true
+        },
+        licenseQuantities: {
+            type: Map,
+            of: Number,
+            default: {}
+        },
         payment_info: {
             type: String
         },

@@ -16,7 +16,7 @@ const router = express.Router();
  * @swagger
  * /api/cart/add-to-cart:
  *   post:
- *     summary: Add an item to the cart
+ *     summary: Add a course to the cart
  *     tags: [Cart]
  *     security:
  *       - bearerAuth: []
@@ -26,17 +26,28 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               productId:
- *                 type: string
- *               quantity:
- *                 type: number
  *             required:
- *               - productId
- *               - quantity
+ *               - courseId
+ *             properties:
+ *               courseId:
+ *                 type: string
+ *                 example: 665e4c47f7a91e0d0f5489f3
+ *               quantity:
+ *                 type: integer
+ *                 example: 5
+ *                 description: Only required for business users (admin or manager)
  *     responses:
- *       200:
- *         description: Item added to cart successfully
+ *       201:
+ *         description: Added to cart successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
  *       400:
  *         description: Invalid input data
  *       401:
@@ -80,7 +91,7 @@ router.get('/cart-items', updateAccessToken, isAuthenticated, getCartItems);
  * @swagger
  * /api/cart/remove-item:
  *   delete:
- *     summary: Remove an item from the cart
+ *     summary: Remove a course from the cart
  *     tags: [Cart]
  *     security:
  *       - bearerAuth: []
@@ -90,18 +101,30 @@ router.get('/cart-items', updateAccessToken, isAuthenticated, getCartItems);
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               productId:
- *                 type: string
  *             required:
- *               - productId
+ *               - courseId
+ *             properties:
+ *               courseId:
+ *                 type: string
+ *                 example: 665e4c47f7a91e0d0f5489f3
  *     responses:
  *       200:
- *         description: Item removed successfully
+ *         description: Item removed from cart
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
  *       400:
- *         description: Invalid productId
+ *         description: Course ID is required
  *       401:
  *         description: Unauthorized
+ *       404:
+ *         description: Item not found in cart or cart not found
  */
 router.delete('/remove-item', updateAccessToken, isAuthenticated, removeCartItem);
 

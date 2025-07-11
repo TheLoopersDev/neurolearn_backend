@@ -6,6 +6,11 @@ const CartItemSchema = new Schema<ICartItem>({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Course',
         required: true
+    },
+    quantity: {
+        type: Number,
+        default: 1,
+        min: 1
     }
 });
 
