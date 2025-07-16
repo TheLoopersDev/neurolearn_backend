@@ -32,7 +32,7 @@ export interface ICourse extends Document {
     level?: Types.ObjectId;
     benefits?: { title: string }[];
     prerequisites?: { title: string }[];
-    reviews?: IReview[];
+    reviews?: IReviewClient[];
     sections?: {
         _id: Types.ObjectId;
     }[];
@@ -76,7 +76,10 @@ export interface IReviewClient {
     comment: string;
     user: {
         name: string;
-        avatar: string;
+        avatar?: {
+            thumbnail?: string;
+            url?: string;
+        };
     };
     commentReplies?: Array<{
         user: {
@@ -85,6 +88,7 @@ export interface IReviewClient {
         };
         comment: string;
     }>;
+    createdAt?: Date;
 }
 
 export interface ICourseDetail
