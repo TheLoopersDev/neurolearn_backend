@@ -61,7 +61,7 @@ const router = express.Router();
  *       401:
  *         description: Not authenticated
  */
-router.get('/user-courses', updateAccessToken, isAuthenticated, getCoursesByUser, getUserInfo);
+router.get('/user-courses', isAuthenticated, updateAccessToken, getCoursesByUser, getUserInfo);
 
 /**
  * @swagger
@@ -115,7 +115,7 @@ router.get('/sort', getCoursesWithSort as RequestHandler);
  *       401:
  *         description: Not authenticated
  */
-router.post('/create-course', updateAccessToken, isAuthenticated, uploadCourse);
+router.post('/create-course', isAuthenticated, updateAccessToken, uploadCourse);
 
 /**
  * @swagger
@@ -154,7 +154,7 @@ router.post('/create-course', updateAccessToken, isAuthenticated, uploadCourse);
  *       404:
  *         description: Course not found
  */
-router.put('/update-course/:id', updateAccessToken, isAuthenticated, updateCourse);
+router.put('/update-course/:id', isAuthenticated, updateAccessToken, updateCourse);
 
 /**
  * @swagger
@@ -178,7 +178,7 @@ router.put('/update-course/:id', updateAccessToken, isAuthenticated, updateCours
  *       404:
  *         description: Course not found
  */
-router.put('/publish-course/:id', updateAccessToken, isAuthenticated, publishCourse);
+router.put('/publish-course/:id', isAuthenticated, updateAccessToken, publishCourse);
 
 /**
  * @swagger
@@ -202,7 +202,7 @@ router.put('/publish-course/:id', updateAccessToken, isAuthenticated, publishCou
  *       404:
  *         description: Course not found
  */
-router.put('/unpublish-course/:id', updateAccessToken, isAuthenticated, unpublishCourse);
+router.put('/unpublish-course/:id', isAuthenticated, updateAccessToken, unpublishCourse);
 
 /**
  * @swagger
@@ -299,7 +299,7 @@ router.get('/course-data/:id', getSingleCourseFullDetail);
  *       404:
  *         description: Course not found
  */
-router.get('/:id', getSingleCourse);
+router.get('/:id', isAuthenticated, updateAccessToken, getSingleCourse);
 
 /**
  * @swagger
@@ -330,7 +330,7 @@ router.get('/', getAllCoursesWithoutPurchase);
  *       401:
  *         description: Not authenticated
  */
-router.get('/purchased/my-course', updateAccessToken, isAuthenticated, getAllPurchasedCoursesOfUser);
+router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPurchasedCoursesOfUser);
 
 /**
  * @swagger
@@ -354,7 +354,7 @@ router.get('/purchased/my-course', updateAccessToken, isAuthenticated, getAllPur
  *       404:
  *         description: Course not found
  */
-router.get('/purchased/:id', updateAccessToken, isAuthenticated, getPurchasedCourseByUser);
+router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
 
 /**
  * @swagger
@@ -378,7 +378,7 @@ router.get('/purchased/:id', updateAccessToken, isAuthenticated, getPurchasedCou
  *       404:
  *         description: Course not found
  */
-router.get('/uploaded/:id', updateAccessToken, isAuthenticated, getUploadedCourseByInstructor);
+router.get('/uploaded/:id', isAuthenticated, updateAccessToken, getUploadedCourseByInstructor);
 
 /**
  * @swagger
@@ -398,8 +398,8 @@ router.get('/uploaded/:id', updateAccessToken, isAuthenticated, getUploadedCours
  */
 router.get(
     '/instructor/all',
-    updateAccessToken,
     isAuthenticated,
+    updateAccessToken,
     authorizeRoles('instructor', 'user'),
     getAllUploadedAndPurchasedCoursesOfInstructor
 );
@@ -432,7 +432,7 @@ router.get(
  *       401:
  *         description: Not authenticated
  */
-router.put('/add-question', updateAccessToken, isAuthenticated, addQuestion);
+router.put('/add-question', isAuthenticated, updateAccessToken, addQuestion);
 
 /**
  * @swagger
@@ -465,7 +465,7 @@ router.put('/add-question', updateAccessToken, isAuthenticated, addQuestion);
  *       401:
  *         description: Not authenticated
  */
-router.put('/add-answer', updateAccessToken, isAuthenticated, addAnswer);
+router.put('/add-answer', isAuthenticated, updateAccessToken, addAnswer);
 
 /**
  * @swagger
@@ -503,7 +503,7 @@ router.put('/add-answer', updateAccessToken, isAuthenticated, addAnswer);
  *       401:
  *         description: Not authenticated
  */
-router.put('/add-review/:id', updateAccessToken, isAuthenticated, addReview);
+router.put('/add-review/:id', isAuthenticated, updateAccessToken, addReview);
 
 /**
  * @swagger
@@ -536,7 +536,7 @@ router.put('/add-review/:id', updateAccessToken, isAuthenticated, addReview);
  *       401:
  *         description: Not authenticated
  */
-router.put('/add-reply', updateAccessToken, isAuthenticated, addReplyToReview);
+router.put('/add-reply', isAuthenticated, updateAccessToken, addReplyToReview);
 
 /**
  * @swagger
@@ -582,8 +582,8 @@ router.get('/get-courses', isAuthenticated, authorizeRoles('admin'), getAllCours
  */
 router.delete(
     '/delete-course/:id',
-    updateAccessToken,
     isAuthenticated,
+    updateAccessToken,
     authorizeRoles('instructor', 'admin'),
     deleteCourse
 );
@@ -619,7 +619,7 @@ router.delete(
  *       401:
  *         description: Not authenticated
  */
-router.put('/create-section/:id', updateAccessToken, isAuthenticated, createSection);
+router.put('/create-section/:id', isAuthenticated, updateAccessToken, createSection);
 
 /**
  * @swagger
@@ -660,7 +660,7 @@ router.put('/create-section/:id', updateAccessToken, isAuthenticated, createSect
  *         description: Not authenticated
  */
 
-router.put('/update-section/:id', updateAccessToken, isAuthenticated, updateSection);
+router.put('/update-section/:id', isAuthenticated, updateAccessToken, updateSection);
 
 /**
  * @swagger
@@ -699,7 +699,7 @@ router.put('/update-section/:id', updateAccessToken, isAuthenticated, updateSect
  *       401:
  *         description: Not authenticated
  */
-router.put('/update-lesson/:id', updateAccessToken, isAuthenticated, updateLesson);
+router.put('/update-lesson/:id', isAuthenticated, updateAccessToken, updateLesson);
 
 /**
  * @swagger
@@ -735,7 +735,7 @@ router.put('/update-lesson/:id', updateAccessToken, isAuthenticated, updateLesso
  *       401:
  *         description: Not authenticated
  */
-router.put('/delete-lesson/:id', updateAccessToken, isAuthenticated, deleteLesson);
+router.put('/delete-lesson/:id', isAuthenticated, updateAccessToken, deleteLesson);
 
 /**
  * @swagger
@@ -771,7 +771,7 @@ router.put('/delete-lesson/:id', updateAccessToken, isAuthenticated, deleteLesso
  *       401:
  *         description: Not authenticated
  */
-router.put('/publish-lesson/:id', updateAccessToken, isAuthenticated, publishLesson);
+router.put('/publish-lesson/:id', isAuthenticated, updateAccessToken, publishLesson);
 
 /**
  * @swagger
@@ -807,7 +807,7 @@ router.put('/publish-lesson/:id', updateAccessToken, isAuthenticated, publishLes
  *       401:
  *         description: Not authenticated
  */
-router.put('/unpublish-lesson/:id', updateAccessToken, isAuthenticated, unPublishLesson);
+router.put('/unpublish-lesson/:id', isAuthenticated, updateAccessToken, unPublishLesson);
 
 /**
  * @swagger
@@ -840,7 +840,7 @@ router.put('/unpublish-lesson/:id', updateAccessToken, isAuthenticated, unPublis
  *       401:
  *         description: Not authenticated
  */
-router.put('/publish-section/:id', updateAccessToken, isAuthenticated, publishSection);
+router.put('/publish-section/:id', isAuthenticated, updateAccessToken, publishSection);
 
 /**
  * @swagger
@@ -873,7 +873,7 @@ router.put('/publish-section/:id', updateAccessToken, isAuthenticated, publishSe
  *       401:
  *         description: Not authenticated
  */
-router.put('/unpublish-section/:id', updateAccessToken, isAuthenticated, unpublishSection);
+router.put('/unpublish-section/:id', isAuthenticated, updateAccessToken, unpublishSection);
 
 /**
  * @swagger
@@ -906,7 +906,7 @@ router.put('/unpublish-section/:id', updateAccessToken, isAuthenticated, unpubli
  *       401:
  *         description: Not authenticated
  */
-router.put('/delete-section/:id', updateAccessToken, isAuthenticated, deleteSection);
+router.put('/delete-section/:id', isAuthenticated, updateAccessToken, deleteSection);
 
 /**
  * @swagger

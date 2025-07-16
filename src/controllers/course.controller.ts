@@ -236,14 +236,14 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
     // Lọc video nếu không miễn phí
     const processedSections = Array.isArray(course.sections)
         ? course.sections.map((section) => ({
-              ...section,
-              lessons: Array.isArray(section.lessons)
-                  ? section.lessons.map((lesson) => ({
-                        ...lesson,
-                        videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-                    }))
-                  : []
-          }))
+            ...section,
+            lessons: Array.isArray(section.lessons)
+                ? section.lessons.map((lesson) => ({
+                    ...lesson,
+                    videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+                }))
+                : []
+        }))
         : [];
 
     const totalLessons = processedSections.reduce(
@@ -289,15 +289,15 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         },
         reviews: Array.isArray(course.reviews)
             ? course.reviews.map((r) => ({
-                  _id: r._id,
-                  rating: r.rating,
-                  comment: r.comment,
-                  user: {
-                      name: r.user?.name || '',
-                      avatar: r.user?.avatar || ''
-                  },
-                  commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
-              }))
+                _id: r._id,
+                rating: r.rating,
+                comment: r.comment,
+                user: {
+                    name: r.user?.name || '',
+                    avatar: r.user?.avatar || ''
+                },
+                commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
+            }))
             : []
     };
 
@@ -426,16 +426,16 @@ export const deleteLesson = catchAsync(async (req: Request, res: Response, next:
             const match = c._id === lesson._id;
             return match
                 ? {
-                      ...c,
-                      title: null,
-                      description: null,
-                      videoLength: null,
-                      isFree: false,
-                      videoUrl: null,
-                      links: [],
-                      isPublished: false,
-                      isPublishedSection: false
-                  }
+                    ...c,
+                    title: null,
+                    description: null,
+                    videoLength: null,
+                    isFree: false,
+                    videoUrl: null,
+                    links: [],
+                    isPublished: false,
+                    isPublishedSection: false
+                }
                 : c;
         });
     } else {
@@ -487,9 +487,9 @@ export const publishLesson = catchAsync(async (req: Request, res: Response, next
         const match = c._id === lesson._id;
         return match
             ? {
-                  ...c,
-                  isPublished: true
-              }
+                ...c,
+                isPublished: true
+            }
             : c;
     });
 
@@ -536,9 +536,9 @@ export const unPublishLesson = catchAsync(async (req: Request, res: Response, ne
         const match = c._id === lesson._id;
         return match
             ? {
-                  ...c,
-                  isPublished: false
-              }
+                ...c,
+                isPublished: false
+            }
             : c;
     });
 
@@ -582,9 +582,9 @@ export const publishSection = catchAsync(async (req: Request, res: Response, nex
         const match = c.videoSection === data.videoSection;
         return match
             ? {
-                  ...c,
-                  isPublishedSection: true
-              }
+                ...c,
+                isPublishedSection: true
+            }
             : c;
     });
 
@@ -628,9 +628,9 @@ export const unpublishSection = catchAsync(async (req: Request, res: Response, n
         const match = c.videoSection === data.videoSection;
         return match
             ? {
-                  ...c,
-                  isPublishedSection: false
-              }
+                ...c,
+                isPublishedSection: false
+            }
             : c;
     });
 
@@ -1316,7 +1316,7 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
                 _id: course._id,
                 name: course.name,
                 subTitle: course.subTitle,
-                thumbnail: course.thumbnail?.url || null,
+                thumbnail: course.thumbnail ? { url: course.thumbnail.url } : null,
                 author: course.authorId,
                 category: course.category,
                 rating: course.rating,
@@ -1500,11 +1500,17 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     // Populate Sections từ Course
     const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
         .sort({ order: 1 })
-        .populate({
+        .populate([{
             path: 'lessons',
             match: { isPublished: true },
-            options: { sort: { order: 1 } }
-        })
+            options: { sort: { order: 1 } },
+
+        },
+        {
+            path: 'quizzes',
+            select: 'name examTitle duration difficulty totalQuestions isPublished sectionOrder lessonOrder',
+            match: { isPublished: true }
+        }])
         .lean();
 
     // Xử lý ẩn video nếu không miễn phí
@@ -1512,11 +1518,13 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         ...section,
         lessons: Array.isArray(section.lessons)
             ? section.lessons.map((lesson) => ({
-                  ...lesson,
-                  videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-              }))
-            : []
+                ...lesson,
+                videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+            }))
+            : [],
+        quizzes: Array.isArray(section.quizzes) ? section.quizzes : []
     }));
+
 
     const totalLessons = processedSections.reduce(
         (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
@@ -1549,6 +1557,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             isFree: course.isFree,
             purchased: course.purchased ?? 0,
             level: course.level?.name ?? null,
+            reviews: course.reviews || [],
             rating: course.rating ?? 0,
             category: course.category,
             subCategory: course.subCategory,

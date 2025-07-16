@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { catchAsync } from '@/utils/catchAsync';
-import ErrorHandler from '@/utils/ErrorHandler';
-import ProgressModel from '@/models/Progress.model';
-import CourseModel from '@/models/Course.model';
-import { redis } from '@/utils/redis';
-import LessonModel from '@/models/Lesson.model';
-import SectionModel from '@/models/Section.model';
-import UserModel from '@/models/User.model';
-import CertificateModel from '@/models/Certificate.model';
+import { catchAsync } from '../utils/catchAsync';
+import ErrorHandler from '../utils/ErrorHandler';
+import ProgressModel from '../models/Progress.model';
+import CourseModel from '../models/Course.model';
+import { redis } from '../utils/redis';
+import LessonModel from '../models/Lesson.model';
+import SectionModel from '../models/Section.model';
+import UserModel from '../models/User.model';
+import CertificateModel from '../models/Certificate.model';
 
 // Update lesson completion status via Progress model
 export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
