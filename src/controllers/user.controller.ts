@@ -142,7 +142,7 @@ export const registrationUser = catchAsync(async (req: Request, res: Response, n
     const activationCode = activationToken.activationCode;
 
     const data = { user: { name: user.name }, activationCode };
-    await ejs.renderFile(path.join(__dirname, 'mails', 'activation-mail.ejs'), data);
+    await ejs.renderFile(path.join(__dirname, '../mails', 'activation-mail.ejs'), data);
 
     try {
         await sendMail({ email: user.email, subject: 'Activate your account', template: 'activation-mail.ejs', data });
@@ -535,7 +535,7 @@ export const forgotPasswordUser = catchAsync(async (req: Request, res: Response,
     const resetCode = resetToken.activationCode;
 
     const data = { user: { name: user.name }, resetCode };
-    await ejs.renderFile(path.join(__dirname, 'mails', 'reset-password-mail.ejs'), data);
+    await ejs.renderFile(path.join(__dirname, '../mails', 'reset-password-mail.ejs'), data);
 
     try {
         await sendMail({
