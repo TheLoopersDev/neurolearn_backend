@@ -15,7 +15,7 @@ export interface BusinessT extends Document {
 
     employees: {
         user: Types.ObjectId;
-        position: 'admin' | 'manager' | 'employee';
+        role: 'admin' | 'manager' | 'employee';
     }[];
 
     courses: BusinessCourse[];

@@ -202,11 +202,15 @@ export const assignCourseToEmployee = catchAsync(async (req: Request, res: Respo
 
 //get business infor by id
 export const getBusinessById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { businessId } = req.params;
+    const user = req.user as {
+        businessInfo?: {
+            businessId?: string;
+        };
+    };
 
-    const business = await BusinessModel.findById(businessId)
-        .populate('employees.user') // populate all user information of employees
-        .populate('courses'); // populate all courses in the business
+    const businessId = user?.businessInfo?.businessId;
+
+    const business = await BusinessModel.findById(businessId).populate('employees.user').populate('courses.course');
 
     if (!business) {
         return next(new ErrorHandler('Business not found', 404));
@@ -422,4 +426,130 @@ export const removeEmployeeFromBusiness = catchAsync(async (req: Request, res: R
         message: 'Employee removed from business successfully'
     });
 });
-  
+
+//Get statistics of a business
+export const getBusinessStatistics = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId } = req.params;
+
+    const business = await BusinessModel.findById(businessId).populate('employees.user');
+    if (!business) return next(new ErrorHandler('Business not found', 404));
+
+    const totalEmployees = business.employees.filter((emp: any) => emp.role === 'employee').length;
+    const totalManagers = business.employees.filter((emp: any) => emp.role === 'manager').length;
+    const totalCourses = business.courses.length;
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Khởi tạo thống kê tháng từ Jan đến Dec với giá trị mặc định là 0
+    const employeeMonthlyData: { month: string; value: number }[] = monthNames.map((month) => ({
+        month,
+        value: 0
+    }));
+
+    const managerMonthlyData: { month: string; value: number }[] = monthNames.map((month) => ({
+        month,
+        value: 0
+    }));
+
+    for (const emp of business.employees) {
+        const createdAt = new Date(emp.createdAt || emp.user?.createdAt || emp.user?._id?.getTimestamp());
+        const monthIndex = createdAt.getMonth(); // 0-11
+
+        if (emp.role === 'employee') {
+            employeeMonthlyData[monthIndex].value += 1;
+        } else if (emp.role === 'manager') {
+            managerMonthlyData[monthIndex].value += 1;
+        }
+    }
+
+    res.status(200).json({
+        success: true,
+        totalEmployees,
+        totalManagers,
+        totalCourses,
+        employeeMonthlyData,
+        managerMonthlyData
+    });
+});
+
+// Get course with leaner in business
+export const getCourseDetailWithLearners = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as {
+        _id: string;
+        businessInfo?: {
+            businessId?: string;
+        };
+    };
+
+    const { courseId } = req.params;
+    const businessId = user?.businessInfo?.businessId;
+
+    if (!businessId) {
+        return next(new ErrorHandler('Business ID not found for current user', 400));
+    }
+
+    const business = await BusinessModel.findById(businessId).populate({
+        path: 'courses.course',
+        model: 'Course'
+    });
+
+    if (!business) return next(new ErrorHandler('Business not found', 404));
+
+    const courseInfo = business.courses.find((c: any) => c.course._id.toString() === courseId);
+    if (!courseInfo) return next(new ErrorHandler('Course not found in business', 404));
+
+    const course = courseInfo.course;
+
+    const learners = await UserModel.find({
+        'businessInfo.businessId': businessId,
+        assignedCourses: {
+            $elemMatch: { course: course._id }
+        }
+    }).select('name email avatar assignedCourses');
+
+    const learnersWithProgress = await Promise.all(
+        learners.map(async (learner) => {
+            const assigned = learner.assignedCourses.find((c: any) => c.course.toString() === courseId);
+            const progress = await ProgressModel.findOne({
+                user: learner._id,
+                course: course._id
+            });
+
+            let learningProgress = 0;
+            if (progress && progress.totalLessons > 0) {
+                learningProgress = Math.round((progress.totalCompleted / progress.totalLessons) * 100);
+            }
+
+            return {
+                _id: learner._id,
+                name: learner.name,
+                email: learner.email,
+                avatar: learner.avatar,
+                progress: learningProgress,
+                enrollmentDate: assigned?.startDate,
+                status: assigned?.status,
+                startDate: assigned?.startDate,
+                dueDate: assigned?.dueDate
+            };
+        })
+    );
+
+    res.status(200).json({
+        success: true,
+        course: {
+            _id: course._id,
+            name: course.name,
+            description: course.description,
+            subTitle: course.subTitle,
+            thumbnail: course.thumbnail,
+            author: course.author,
+            sections: course.sections,
+            rating: course.rating,
+            price: course.price,
+            totalLicenses: courseInfo.totalLicenses,
+            createdAt: course.createdAt,
+            updatedAt: course.updatedAt
+        },
+        learners: learnersWithProgress
+    });
+});

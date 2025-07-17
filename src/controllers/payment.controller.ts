@@ -13,15 +13,17 @@ const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL
 
 export const createPaymentLink = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { amount, description, courseIds, licenseQuantities, userId, webhookUrl } = req.body;
+        const { amount, description, courseIds, licenseQuantities } = req.body;
+
+        const userId = req.user?._id;
 
         if (!amount || !description || !Array.isArray(courseIds) || !userId) {
-            res.status(400).json({ error: 'Missing require field' });
+            res.status(400).json({ error: 'Missing required field' });
             return;
         }
 
         if (description.length > 25) {
-            res.status(400).json({ error: 'Description must not be great than 25' });
+            res.status(400).json({ error: 'Description must not be greater than 25 characters' });
             return;
         }
 
@@ -33,17 +35,24 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             description,
             returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
             cancelUrl: `${clientUrl}`,
-            webhookUrl,
             extraData: JSON.stringify({ userId, courseIds })
         } as any);
-        // Save Order vào DB để tra cứu khi webhook đến
+
+        // Xác định userType
+        const userType =
+            req.user?.businessInfo?.role === 'admin' || req.user?.businessInfo?.role === 'manager'
+                ? 'business'
+                : 'user';
+
+        // Lưu đơn hàng
         await Order.create({
             userId,
-            courseIds: courseIds.map((id) => new mongoose.Types.ObjectId(id)),
-            licenseQuantities: licenseQuantities || [],
-            payment_info: `PayOS`,
+            courseIds: courseIds.map((id: string) => new mongoose.Types.ObjectId(id)),
+            licenseQuantities: licenseQuantities || {},
+            payment_info: 'PayOS',
             orderCode,
-            price: amount
+            price: amount,
+            userType
         });
 
         res.json({ checkoutUrl: paymentLinkRes.checkoutUrl });
