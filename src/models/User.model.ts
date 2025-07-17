@@ -95,11 +95,7 @@ import { UserT } from '../interfaces/User';
 
 export const UserSchema: Schema<UserT> = new Schema(
     {
-        name: {
-            type: String,
-            required: [true, 'Please provide user name'],
-            trim: true
-        },
+        name: { type: String, required: [true, 'Please provide user name'], trim: true },
         email: {
             type: String,
             required: [true, 'Please provide email'],
@@ -134,80 +130,25 @@ export const UserSchema: Schema<UserT> = new Schema(
             enum: ['user', 'admin', 'instructor', 'business'],
             default: 'user'
         },
-        avatar: {
-            public_id: String,
-            url: String
-        },
-        isVerified: {
-            type: Boolean,
-            default: false
-        },
-        purchasedCourses: [
-            {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Course'
-            }
-        ],
-        uploadedCourses: [
-            {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Course'
-            }
-        ],
+        avatar: { public_id: String, url: String },
+        isVerified: { type: Boolean, default: false },
+        purchasedCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
+        uploadedCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
         assignedCourses: [
             {
-                course: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: 'Course',
-                    required: true
-                },
-                startDate: {
-                    type: Date,
-                    required: true
-                },
-                dueDate: {
-                    type: Date,
-                    required: true
-                },
-                status: {
-                    type: String,
-                    enum: ['not_started', 'in_progress', 'completed'],
-                    default: 'not_started'
-                }
+                course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
+                startDate: { type: Date, required: true },
+                dueDate: { type: Date, required: true },
+                status: { type: String, enum: ['not_started', 'in_progress', 'completed'], default: 'not_started' }
             }
         ],
-        introduce: {
-            type: String,
-            default: ''
-        },
-        profession: {
-            type: String,
-            trim: true,
-            default: ''
-        },
-        phoneNumber: {
-            type: String,
-            trim: true,
-            default: ''
-        },
-        address: {
-            type: String,
-            trim: true,
-            default: ''
-        },
-        age: {
-            type: Number,
-            min: [0, 'Age must be a positive number'],
-            default: null
-        },
-        rating: {
-            type: Number,
-            default: null
-        },
-        student: {
-            type: Number,
-            default: null
-        },
+        introduce: { type: String, default: '' },
+        profession: { type: String, trim: true, default: '' },
+        phoneNumber: { type: String, trim: true, default: '' },
+        address: { type: String, trim: true, default: '' },
+        age: { type: Number, min: [0, 'Age must be a positive number'], default: null },
+        rating: { type: Number, default: null },
+        student: { type: Number, default: null },
         socialLinks: {
             facebook: { type: String, default: '' },
             twitter: { type: String, default: '' },
@@ -215,33 +156,25 @@ export const UserSchema: Schema<UserT> = new Schema(
             instagram: { type: String, default: '' }
         },
         businessInfo: {
-            businessId: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Business',
-                default: null
-            },
-            role: {
-                type: String,
-                enum: ['admin', 'manager', 'employee'],
-                default: null
-            }
+            businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', default: null },
+            role: { type: String, enum: ['admin', 'manager', 'employee'], default: null }
         }
     },
     {
         timestamps: true,
         toJSON: {
-            transform: (doc, ret) => {
-                delete ret.__v;
-                delete ret.password;
-                delete ret.confirmPassword;
+            transform: (doc: any, ret: any) => {
+                delete ret?.__v;
+                delete ret?.password;
+                delete ret?.confirmPassword;
                 return ret;
             }
         },
         toObject: {
-            transform: (doc, ret) => {
-                delete ret.__v;
-                delete ret.password;
-                delete ret.confirmPassword;
+            transform: (doc: any, ret: any) => {
+                delete ret?.__v;
+                delete ret?.password;
+                delete ret?.confirmPassword;
                 return ret;
             }
         }

@@ -63,14 +63,14 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
     {
         timestamps: true,
         toJSON: {
-            transform(doc, ret) {
-                delete ret.__v;
+            transform(doc, ret: any) {
+                delete ret?.__v;
                 return ret;
             }
         },
         toObject: {
             transform(doc: any, ret: any) {
-                delete ret.__v;
+                delete ret?.__v;
                 return ret;
             }
         }
