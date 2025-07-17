@@ -3,6 +3,8 @@ import {
     addEmployeeByEmail,
     assignCourseToEmployee,
     getBusinessById,
+    getBusinessStatistics,
+    getCourseDetailWithLearners,
     getEmployeeList,
     getEmployeesInBusiness,
     importEmployeesFromExcel,
@@ -215,17 +217,12 @@ router.post(
 
 /**
  * @swagger
- * /api/business/{businessId}:
+ * /api/business/me:
  *   get:
- *     summary: Get detailed information of a business
+ *     summary: Get detailed information of the business the current user belongs to
  *     tags: [Business]
- *     parameters:
- *       - in: path
- *         name: businessId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the business to retrieve
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Business details retrieved successfully
@@ -239,18 +236,14 @@ router.post(
  *                   example: true
  *                 business:
  *                   type: object
+ *       400:
+ *         description: Business ID not found in user info
  *       404:
  *         description: Business not found
  *       401:
  *         description: Unauthorized
  */
-router.get(
-    '/:businessId',
-    updateAccessToken,
-    isAuthenticated,
-    authorizeBusinessRoles('admin', 'manager'),
-    getBusinessById
-);
+router.get('/me', updateAccessToken, isAuthenticated, authorizeBusinessRoles('admin', 'manager'), getBusinessById);
 
 /**
  * @swagger
@@ -456,6 +449,208 @@ router.delete(
     isAuthenticated,
     authorizeBusinessRoles('admin', 'manager'),
     removeEmployeeFromBusiness
+);
+
+/**
+ * @swagger
+ * /api/business/{businessId}/statistics:
+ *   get:
+ *     summary: Get business statistics (total employees, managers, courses, and monthly stats)
+ *     tags: [Business]
+ *     parameters:
+ *       - in: path
+ *         name: businessId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the business to retrieve statistics for
+ *     responses:
+ *       200:
+ *         description: Business statistics fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 totalEmployees:
+ *                   type: number
+ *                   example: 10
+ *                 totalManagers:
+ *                   type: number
+ *                   example: 3
+ *                 totalCourses:
+ *                   type: number
+ *                   example: 5
+ *                 employeeMonthlyData:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       month:
+ *                         type: string
+ *                         example: Jan
+ *                       value:
+ *                         type: number
+ *                         example: 2
+ *                 managerMonthlyData:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       month:
+ *                         type: string
+ *                         example: Jan
+ *                       value:
+ *                         type: number
+ *                         example: 1
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - not a business member
+ *       404:
+ *         description: Business not found
+ */
+router.get(
+    '/:businessId/statistics',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    getBusinessStatistics
+);
+
+/**
+ * @swagger
+ * /api/business/courses/{courseId}/detail:
+ *   get:
+ *     summary: Get course details and learners assigned to the course in the current user's business
+ *     tags: [Business]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the course
+ *     responses:
+ *       200:
+ *         description: Course detail and list of learners retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     course:
+ *                       type: object
+ *                       description: Detailed information about the course
+ *                       properties:
+ *                         _id:
+ *                           type: string
+ *                         name:
+ *                           type: string
+ *                         subTitle:
+ *                           type: string
+ *                         thumbnail:
+ *                           type: object
+ *                           properties:
+ *                             url:
+ *                               type: string
+ *                         purchased:
+ *                           type: number
+ *                         author:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                             profession:
+ *                               type: string
+ *                         rating:
+ *                           type: number
+ *                         price:
+ *                           type: number
+ *                         isPublished:
+ *                           type: boolean
+ *                         isFree:
+ *                           type: boolean
+ *                         createdAt:
+ *                           type: string
+ *                         updatedAt:
+ *                           type: string
+ *                     learners:
+ *                       type: array
+ *                       description: List of learners assigned to the course
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           avatar:
+ *                             type: object
+ *                             properties:
+ *                               url:
+ *                                 type: string
+ *                           status:
+ *                             type: string
+ *                             example: Learning
+ *                           enrollmentDate:
+ *                             type: string
+ *                             example: 05 Jan, 2025
+ *                           progress:
+ *                             type: number
+ *                             example: 50
+ *                           lastOpenedContent:
+ *                             type: string
+ *                           quizResults:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 quizId:
+ *                                   type: string
+ *                                 quizName:
+ *                                   type: string
+ *                                 status:
+ *                                   type: string
+ *                                 totalAssignment:
+ *                                   type: number
+ *                                 maxAssignment:
+ *                                   type: number
+ *                                 totalScore:
+ *                                   type: number
+ *                                 maxScore:
+ *                                   type: number
+ *       400:
+ *         description: Business ID not found from user
+ *       404:
+ *         description: Course or business not found, or course not assigned to business
+ *       401:
+ *         description: Unauthorized
+ */
+
+router.get(
+    '/courses/:courseId/detail',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    getCourseDetailWithLearners
 );
 
 export default router;

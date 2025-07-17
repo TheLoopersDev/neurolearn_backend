@@ -28,6 +28,10 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
                     type: String,
                     enum: ['admin', 'manager', 'employee'],
                     required: true
+                },
+                createdAt: {
+                    type: Date,
+                    default: Date.now
                 }
             }
         ],

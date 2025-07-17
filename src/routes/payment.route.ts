@@ -1,5 +1,7 @@
 import express from 'express';
-import { createPaymentLink, payosWebhook } from '../controllers/payment.controller';
+import { createPaymentLink } from '../controllers/payment.controller';
+import { updateAccessToken } from '@/controllers/user.controller';
+import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
 
 const router = express.Router();
 
@@ -49,7 +51,7 @@ const router = express.Router();
  *       500:
  *         description: Lỗi server
  */
-router.post('/create-payment-link', createPaymentLink);
+router.post('/create-payment-link', updateAccessToken, isAuthenticated, createPaymentLink);
 
 /**
  * @swagger
