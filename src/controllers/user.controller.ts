@@ -135,26 +135,17 @@ export const registrationUser = catchAsync(async (req: Request, res: Response, n
     const isEmailExist = await UserModel.findOne({ email });
     if (isEmailExist) return next(new ErrorHandler('Email already exist', 400));
 
-    const user: IRegistrationBody = {
-        name,
-        email,
-        password
-    };
+    const user: IRegistrationBody = { name, email, password };
 
     const activationToken = createActivationToken(user);
 
     const activationCode = activationToken.activationCode;
 
     const data = { user: { name: user.name }, activationCode };
-    await ejs.renderFile(path.join(__dirname, '../mails/activation-mail.ejs'), data);
+    await ejs.renderFile(path.join(__dirname, '../mails', 'activation-mail.ejs'), data);
 
     try {
-        await sendMail({
-            email: user.email,
-            subject: 'Activate your account',
-            template: 'activation-mail.ejs',
-            data
-        });
+        await sendMail({ email: user.email, subject: 'Activate your account', template: 'activation-mail.ejs', data });
 
         res.status(201).json({
             success: true,
@@ -191,15 +182,9 @@ export const activateUser = catchAsync(async (req: Request, res: Response, next:
     const isEmailExist = await UserModel.findOne({ email });
     if (isEmailExist) return next(new ErrorHandler('Email already exist', 400));
 
-    await UserModel.create({
-        name,
-        email,
-        password
-    });
+    await UserModel.create({ name, email, password });
 
-    res.status(201).json({
-        success: true
-    });
+    res.status(201).json({ success: true });
 });
 
 export const loginUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -245,10 +230,7 @@ export const logoutUser = catchAsync(async (req: Request, res: Response, next: N
         redis.del(userId as RedisKey);
     }
 
-    res.status(200).json({
-        success: true,
-        message: 'Logged out successfully'
-    });
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 
 export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -270,12 +252,8 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
 
     const user = JSON.parse(session);
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, {
-        expiresIn: '1h'
-    });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, {
-        expiresIn: '3d'
-    });
+    const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, { expiresIn: '1h' });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, { expiresIn: '3d' });
 
     req.user = user;
     req.access_token = accessToken;
@@ -391,12 +369,8 @@ export const refreshToken = catchAsync(async (req: Request, res: Response, next:
 
     const user = JSON.parse(session);
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, {
-        expiresIn: '1m'
-    });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, {
-        expiresIn: '3d'
-    });
+    const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, { expiresIn: '1m' });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, { expiresIn: '3d' });
 
     req.user = user;
     req.access_token = accessToken;
@@ -404,10 +378,7 @@ export const refreshToken = catchAsync(async (req: Request, res: Response, next:
     res.cookie('access_token', accessToken, accessTokenOptions);
     res.cookie('refresh_token', refreshToken, refreshTokenOptions);
 
-    res.status(200).json({
-        success: true,
-        accessToken
-    });
+    res.status(200).json({ success: true, accessToken });
 });
 
 export const getUserInfo = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -462,24 +433,15 @@ export const updateUserInfo = catchAsync(async (req: Request, res: Response, nex
             await cloudinary.v2.uploader.destroy(user.avatar.public_id);
         }
 
-        const myCloud = await cloudinary.v2.uploader.upload(avatar, {
-            folder: 'avatars',
-            width: 150
-        });
+        const myCloud = await cloudinary.v2.uploader.upload(avatar, { folder: 'avatars', width: 150 });
 
-        user.avatar = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url
-        };
+        user.avatar = { public_id: myCloud.public_id, url: myCloud.secure_url };
     }
 
     await user.save();
     await redis.set(userId, JSON.stringify(user));
 
-    res.status(200).json({
-        success: true,
-        user
-    });
+    res.status(200).json({ success: true, user });
 });
 
 export const updatePassword = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -506,10 +468,7 @@ export const updatePassword = catchAsync(async (req: Request, res: Response, nex
 
     redis.set(req.user?._id as RedisKey, JSON.stringify(user));
 
-    res.status(200).json({
-        success: true,
-        user
-    });
+    res.status(200).json({ success: true, user });
 });
 
 export const updateProfilePicture = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -525,24 +484,15 @@ export const updateProfilePicture = catchAsync(async (req: Request, res: Respons
             await cloudinary.v2.uploader.destroy(user?.avatar?.public_id);
         }
 
-        const myCloud = await cloudinary.v2.uploader.upload(avatar, {
-            folder: 'avatars',
-            width: 150
-        });
-        user.avatar = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url
-        };
+        const myCloud = await cloudinary.v2.uploader.upload(avatar, { folder: 'avatars', width: 150 });
+        user.avatar = { public_id: myCloud.public_id, url: myCloud.secure_url };
     }
 
     await user?.save();
 
     await redis.set(userId as RedisKey, JSON.stringify(user));
 
-    res.status(200).json({
-        success: true,
-        user
-    });
+    res.status(200).json({ success: true, user });
 });
 
 // get all users -- for admin
@@ -571,10 +521,7 @@ export const deleteUser = catchAsync(async (req: Request, res: Response, next: N
 
     await redis.del(id);
 
-    res.status(200).json({
-        success: true,
-        message: 'User deleted successfully'
-    });
+    res.status(200).json({ success: true, message: 'User deleted successfully' });
 });
 
 export const forgotPasswordUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -588,7 +535,7 @@ export const forgotPasswordUser = catchAsync(async (req: Request, res: Response,
     const resetCode = resetToken.activationCode;
 
     const data = { user: { name: user.name }, resetCode };
-    await ejs.renderFile(path.join(__dirname, '../mails/reset-password-mail.ejs'), data);
+    await ejs.renderFile(path.join(__dirname, '../mails', 'reset-password-mail.ejs'), data);
 
     try {
         await sendMail({

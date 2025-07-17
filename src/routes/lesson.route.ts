@@ -12,20 +12,20 @@ import {
     unpublishLesson,
     uploadLessonVideo
 } from '../controllers/lesson.controller';
-import { updateAccessToken } from '@/controllers/user.controller';
-import { upload } from '@/middlewares/upload';
+import { updateAccessToken } from '../controllers/user.controller';
+import { upload } from '../middlewares/upload';
 
 const router = express.Router();
 
 /**
- * @swagger
+ * ..swagger
  * tags:
  *   name: Lesson
  *   description: Lesson management endpoints
  */
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/create/{courseId}/{sectionId}:
  *   post:
  *     summary: Create a lesson under a section
@@ -84,7 +84,7 @@ const router = express.Router();
 router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, createLesson);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/section/{sectionId}:
  *   get:
  *     summary: Get all lessons of a section
@@ -110,7 +110,7 @@ router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, 
 router.get('/section/:sectionId', updateAccessToken, isAuthenticated, getAllLessons);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/{lessonId}:
  *   get:
  *     summary: Get lesson details
@@ -136,7 +136,7 @@ router.get('/section/:sectionId', updateAccessToken, isAuthenticated, getAllLess
 router.get('/:lessonId', updateAccessToken, isAuthenticated, getLessonById);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/update/{lessonId}:
  *   put:
  *     summary: Update a lesson
@@ -186,7 +186,7 @@ router.get('/:lessonId', updateAccessToken, isAuthenticated, getLessonById);
 router.put('/update/:lessonId', updateAccessToken, isAuthenticated, updateLesson);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/delete/{lessonId}:
  *   delete:
  *     summary: Delete a lesson
@@ -212,7 +212,7 @@ router.put('/update/:lessonId', updateAccessToken, isAuthenticated, updateLesson
 router.delete('/delete/:lessonId', updateAccessToken, isAuthenticated, deleteLesson);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/reorder/{sectionId}:
  *   put:
  *     summary: Reorder lessons in a section
@@ -256,7 +256,7 @@ router.delete('/delete/:lessonId', updateAccessToken, isAuthenticated, deleteLes
 router.put('/reorder/:sectionId', updateAccessToken, isAuthenticated, reorderLesson);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/publish/{lessonId}:
  *   put:
  *     summary: Publish a lesson
@@ -282,7 +282,7 @@ router.put('/reorder/:sectionId', updateAccessToken, isAuthenticated, reorderLes
 router.put('/publish/:lessonId', updateAccessToken, isAuthenticated, publishLesson);
 
 /**
- * @swagger
+ * ..swagger
  * /api/lesson/unpublish/{lessonId}:
  *   put:
  *     summary: Unpublish a lesson
@@ -310,7 +310,7 @@ router.put('/unpublish/:lessonId', updateAccessToken, isAuthenticated, unpublish
 export default router;
 
 /**
- * @swagger
+ * ..swagger
  * /api/courses/upload-lesson-video/{id}:
  *   put:
  *     summary: Upload lesson video

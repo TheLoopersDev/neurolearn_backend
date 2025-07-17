@@ -119,9 +119,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
                         business.courses.push({ course: courseId, license: quantity });
                     }
 
-                    await CourseModel.findByIdAndUpdate(courseId, {
-                        $inc: { purchased: quantity }
-                    });
+                    await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
                 }
 
                 await business.save();
@@ -133,9 +131,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
 
                 await Promise.all(
                     courseIds.map(async (courseId: any) => {
-                        await CourseModel.findByIdAndUpdate(courseId, {
-                            $inc: { purchased: 1 }
-                        });
+                        await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } });
                     })
                 );
             }

@@ -82,9 +82,7 @@ export const createOrder = catchAsync(async (req: Request, res: Response, next: 
     };
 
     // Render email template
-    await ejs.renderFile(path.join(__dirname, '../mails/order-confirmation.ejs'), {
-        order: mailData.order
-    });
+    await ejs.renderFile(path.join(__dirname, '../mails', 'order-confirmation.ejs'), { order: mailData.order });
 
     // Send email
     try {
