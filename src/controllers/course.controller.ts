@@ -961,7 +961,7 @@ export const addAnswer = catchAsync(async (req: Request, res: Response, next: Ne
             title: courseContent.title
         };
 
-        await ejs.renderFile(path.join(__dirname, 'mails', 'question-reply.ejs'), data);
+        await ejs.renderFile(path.join(__dirname, '../mails', 'question-reply.ejs'), data);
         try {
             await sendMail({
                 email: question.user.email,
