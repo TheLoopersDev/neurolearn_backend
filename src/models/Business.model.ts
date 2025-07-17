@@ -17,38 +17,44 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
             ref: 'User',
             required: true
         },
-        employees: [
-            {
-                user: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: 'User',
-                    required: true
-                },
-                role: {
-                    type: String,
-                    enum: ['admin', 'manager', 'employee'],
-                    required: true
-                },
-                createdAt: {
-                    type: Date,
-                    default: Date.now
+        employees: {
+            type: [
+                {
+                    user: {
+                        type: mongoose.Schema.Types.ObjectId,
+                        ref: 'User',
+                        required: true
+                    },
+                    role: {
+                        type: String,
+                        enum: ['admin', 'manager', 'employee'],
+                        required: true
+                    },
+                    createdAt: {
+                        type: Date,
+                        default: Date.now
+                    }
                 }
-            }
-        ],
-        courses: [
-            {
-                course: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: 'Course',
-                    required: true
-                },
-                totalLicenses: {
-                    type: Number,
-                    required: true,
-                    default: 0
+            ],
+            default: []
+        },
+        courses: {
+            type: [
+                {
+                    course: {
+                        type: mongoose.Schema.Types.ObjectId,
+                        ref: 'Course',
+                        required: true
+                    },
+                    totalLicenses: {
+                        type: Number,
+                        required: true,
+                        default: 0
+                    }
                 }
-            }
-        ],
+            ],
+            default: []
+        },
         isVerified: {
             type: Boolean,
             default: false
