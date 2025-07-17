@@ -66,71 +66,67 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         //     return;
         // }
 
-        // const webhookData = JSON.parse(rawBody);
+        const webhookData = JSON.parse(rawBody);
 
-        // if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
-        //     const orderCode = webhookData.data.orderCode;
+        if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
+            const orderCode = webhookData.data.orderCode;
 
-        //     const order = await Order.findOne({ orderCode });
-        //     if (!order) {
-        //         console.warn('❌ Không tìm thấy đơn hàng với orderCode:', orderCode);
-        //         res.status(404).send('Order not found');
-        //         return;
-        //     }
+            const order = await Order.findOne({ orderCode });
+            if (!order) {
+                console.warn('❌ Không tìm thấy đơn hàng với orderCode:', orderCode);
+                res.status(404).send('Order not found');
+                return;
+            }
 
-        //     const user = await User.findById(order.userId);
-        //     if (!user) {
-        //         console.warn('❌ Không tìm thấy người dùng:', order.userId);
-        //         res.status(404).send('User not found');
-        //         return;
-        //     }
+            const user = await User.findById(order.userId);
+            if (!user) {
+                console.warn('❌ Không tìm thấy người dùng:', order.userId);
+                res.status(404).send('User not found');
+                return;
+            }
 
-        //     const role = user.businessInfo?.role;
-        //     const isBusiness = role === 'admin' || role === 'manager';
+            const role = user.businessInfo?.role;
+            const isBusiness = role === 'admin' || role === 'manager';
 
-        //     if (isBusiness) {
-        //         const business = await BusinessModel.findOne({ 'employees.user': user._id });
-        //         if (!business) {
-        //             console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
-        //             res.status(404).send('Business not found');
-        //             return;
-        //         }
+            if (isBusiness) {
+                const business = await BusinessModel.findOne({ 'employees.user': user._id });
+                if (!business) {
+                    console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
+                    res.status(404).send('Business not found');
+                    return;
+                }
 
-        //         for (const item of order.licenseQuantities || []) {
-        //             const courseId = new mongoose.Types.ObjectId(item.courseId);
-        //             const quantity = item.quantity;
+                for (const item of order.licenseQuantities || []) {
+                    const courseId = new mongoose.Types.ObjectId(item.courseId);
+                    const quantity = item.quantity;
 
-        //             const existingCourse = business.courses.find(
-        //                 (c: any) => c.course.toString() === courseId.toString()
-        //             );
+                    const existingCourse = business.courses.find(
+                        (c: any) => c.course.toString() === courseId.toString()
+                    );
 
-        //             if (existingCourse) {
-        //                 existingCourse.license += quantity;
-        //             } else {
-        //                 business.courses.push({ course: courseId, license: quantity });
-        //             }
+                    if (existingCourse) {
+                        existingCourse.license += quantity;
+                    } else {
+                        business.courses.push({ course: courseId, license: quantity });
+                    }
 
-        //             await CourseModel.findByIdAndUpdate(courseId, {
-        //                 $inc: { purchased: quantity }
-        //             });
-        //         }
+                    await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
+                }
 
-        //         await business.save();
-        //     } else {
-        //         const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
+                await business.save();
+            } else {
+                const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
 
-        //         user.purchasedCourses.push(...courseIds);
-        //         await user.save();
+                user.purchasedCourses.push(...courseIds);
+                await user.save();
 
-        //         await Promise.all(
-        //             courseIds.map(async (courseId: any) => {
-        //                 await CourseModel.findByIdAndUpdate(courseId, {
-        //                     $inc: { purchased: 1 }
-        //                 });
-        //             })
-        //         );
-        //     }
-        // }
+                await Promise.all(
+                    courseIds.map(async (courseId: any) => {
+                        await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } });
+                    })
+                );
+            }
+        }
 
         res.sendStatus(200);
     } catch (error) {
