@@ -7,6 +7,7 @@ import {
     getCourseDetailWithLearners,
     getEmployeeList,
     getEmployeesInBusiness,
+    getUnassignedEmployeesForCourse,
     importEmployeesFromExcel,
     removeEmployeeFromBusiness,
     upgradeEmployeeRole
@@ -651,6 +652,63 @@ router.get(
     isAuthenticated,
     authorizeBusinessRoles('admin', 'manager'),
     getCourseDetailWithLearners
+);
+
+/**
+ * @swagger
+ * /api/business/courses/{courseId}/unassigned-employees:
+ *   get:
+ *     summary: Get list of employees who are NOT assigned to the given course in the current business
+ *     tags: [Business]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the course
+ *     responses:
+ *       200:
+ *         description: List of unassigned employees retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 employees:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       avatar:
+ *                         type: object
+ *                         properties:
+ *                           url:
+ *                             type: string
+ *       400:
+ *         description: Business ID not found in user
+ *       404:
+ *         description: Course or business not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+    '/courses/:courseId/unassigned-employees',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin', 'manager'),
+    getUnassignedEmployeesForCourse
 );
 
 export default router;
