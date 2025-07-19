@@ -553,3 +553,43 @@ export const getCourseDetailWithLearners = catchAsync(async (req: Request, res: 
         learners: learnersWithProgress
     });
 });
+
+export const getUnassignedEmployeesForCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as {
+        _id: string;
+        businessInfo?: {
+            businessId?: string;
+        };
+    };
+
+    const { courseId } = req.params;
+    const businessId = user?.businessInfo?.businessId;
+
+    if (!businessId) {
+        return next(new ErrorHandler('Business ID not found in user info', 400));
+    }
+
+    const business = await BusinessModel.findById(businessId).populate(
+        'employees.user',
+        'name email avatar assignedCourses'
+    );
+
+    if (!business) {
+        return next(new ErrorHandler('Business not found', 404));
+    }
+
+    const employees = business.employees.filter((emp: any) => emp.role === 'employee');
+
+    const unassignedEmployees = employees.filter((emp: any) => {
+        const user = emp.user;
+        if (!user || !user.assignedCourses) return true;
+
+        const isAssigned = user.assignedCourses.some((c: any) => c.course.toString() === courseId);
+        return !isAssigned;
+    });
+
+    res.status(200).json({
+        success: true,
+        employees: unassignedEmployees
+    });
+});
