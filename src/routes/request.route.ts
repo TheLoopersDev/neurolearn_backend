@@ -5,11 +5,13 @@ import {
     getCourseApprovalRequestByCourseId,
     handleRequestActionCourse,
     createBusinessVerificationRequest,
-    handleRequestActionBusiness
+    handleRequestActionBusiness,
+    createInstructorVerificationRequest,
+    handleRequestActionInstructor
 } from '../controllers/request.controller';
-import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
-import { updateAccessToken } from '../controllers/user.controller';
+import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
+import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { updateAccessToken } from '@/controllers/user.controller';
 
 /**
  * @swagger
@@ -236,6 +238,125 @@ router.put(
     isAuthenticated,
     authorizeRoles('admin'),
     handleRequestActionBusiness
+);
+
+/**
+ * @swagger
+ * /api/request/instructor-verification:
+ *   post:
+ *     summary: Create a instructor verification request (User only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *               - email
+ *               - phone
+ *               - dob
+ *               - address
+ *               - category
+ *               - description
+ *               - experience
+ *               - role
+ *               - company
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 example: "John Doe"
+ *               email:
+ *                 type: string
+ *                 example: "john.doe@example.com"
+ *               phone:
+ *                 type: string
+ *                 example: "123-456-7890"
+ *               dob:
+ *                 type: string
+ *                 example: "2000-01-01"
+ *               address:
+ *                 type: string
+ *                 example: "123 Main St"
+ *               category:
+ *                 type: string
+ *                 example: "Software Engineer"
+ *               description:
+ *                 type: string
+ *                 example: "Experienced in full-stack development"
+ *               experience:
+ *                 type: string
+ *                 example: "5 years"
+ *               role:
+ *                 type: string
+ *                 example: "Software Engineer"
+ *               company:
+ *                 type: string
+ *                 example: "Tech Corp"
+ *               documents:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ["/path/to/doc1.pdf", "/path/to/doc2.jpg"]
+ *     responses:
+ *       201:
+ *         description: Instructor verification request created
+ *       400:
+ *         description: Bad request or already pending
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+    '/instructor-verification',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('user'),
+    createInstructorVerificationRequest
+);
+
+/**
+ * @swagger
+ * /api/request/instructor-verification/{requestId}/action:
+ *   put:
+ *     summary: Approve or reject a instructor verification request (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - action
+ *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [approve, reject]
+ *     responses:
+ *       200:
+ *         description: Request handled
+ *       400:
+ *         description: Invalid action
+ *       404:
+ *         description: Request not found
+ */
+router.put(
+    '/instructor-verification/:requestId/action',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    handleRequestActionInstructor
 );
 
 export = router;

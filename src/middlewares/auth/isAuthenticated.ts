@@ -1,8 +1,8 @@
 import jwt, { JwtPayload } from 'jsonwebtoken';
-import { catchAsync } from '../../utils/catchAsync';
-import ErrorHandler from '../../utils/ErrorHandler';
+import { catchAsync } from '@/utils/catchAsync';
+import ErrorHandler from '@/utils/ErrorHandler';
 import { NextFunction, Request, Response } from 'express';
-import { redis } from '../../utils/redis';
+import { redis } from '@/utils/redis';
 import { Types } from 'mongoose';
 
 export const isAuthenticated = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

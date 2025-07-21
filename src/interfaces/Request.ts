@@ -1,10 +1,28 @@
 import mongoose, { Document } from 'mongoose';
 
-export interface RequestT extends Document {
-    type: 'course_approval' | 'instructor_registration' | 'business_verification';
-    courseId?: mongoose.Types.ObjectId;
-    userId: mongoose.Types.ObjectId;
+export interface Request {
+    _id?: string;
+    courseId?: string | null;
+    businessId?: string | null;
+    userId: string;
+    instructorId?: string | null;
+    type: 'course_approval' | 'business_verification' | 'instructor_verification';
     status: 'pending' | 'approved' | 'rejected';
+    message?: string;
+    data?: {
+        fullName?: string;
+        email?: string;
+        phone?: string;
+        dob?: string;
+        address?: string;
+        category?: string;
+        description?: string;
+        experience?: string;
+        role?: string;
+        company?: string;
+        documents?: string[];
+        [key: string]: any;
+    };
     createdAt?: Date;
     updatedAt?: Date;
 }
