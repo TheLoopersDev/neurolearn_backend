@@ -12,6 +12,7 @@ import {
 import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
 import { updateAccessToken } from '@/controllers/user.controller';
+import { upload } from '../middlewares/upload';
 
 /**
  * @swagger
@@ -101,6 +102,10 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
+    upload.fields([
+        { name: 'logo', maxCount: 1 },
+        { name: 'docImages', maxCount: 10 }
+    ]),
     createBusinessVerificationRequest
 );
 

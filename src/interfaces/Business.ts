@@ -11,6 +11,19 @@ export interface BusinessT extends Document {
     businessName: string;
     description?: string;
 
+    taxCode?: string;
+    email?: string;
+    address?: string;
+    businessSector?: string;
+    logo?: string;
+    docImages?: string[];
+    representative?: {
+        name?: string;
+        phone?: string;
+        email?: string;
+        address?: string;
+    };
+
     createdBy: Types.ObjectId;
 
     employees: {
