@@ -6,6 +6,7 @@ import CourseModel from '../models/Course.model';
 import UserModel from '../models/User.model';
 import sendMail from '../utils/sendMail';
 import BusinessModel from '../models/Business.model';
+import { v2 as cloudinary } from 'cloudinary';
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -107,7 +108,18 @@ export const handleRequestActionCourse = catchAsync(async (req: Request, res: Re
 // Create business approval request
 
 export const createBusinessVerificationRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { businessName, description } = req.body;
+    const {
+        businessName,
+        description,
+        taxCode,
+        email,
+        address,
+        businessSector,
+        representativeName,
+        representativePhone,
+        representativeEmail,
+        representativeAddress
+    } = req.body;
     const createdBy = req.user?._id || req.body.createdBy;
 
     if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
@@ -123,9 +135,57 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
         return next(new ErrorHandler('A business verification request is already pending.', 400));
     }
 
+    // Xử lý file upload lên Cloudinary
+    let logoUrl = '';
+    let docImageUrls: string[] = [];
+    if (req.files) {
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        if (files.logo && files.logo[0]) {
+            const logoFile = files.logo[0];
+            // Upload logo lên Cloudinary
+            logoUrl = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { folder: 'business/logo' },
+                    (error, result) => {
+                        if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                        else resolve(result.secure_url);
+                    }
+                );
+                stream.end(logoFile.buffer);
+            });
+        }
+        if (files.docImages) {
+            for (const file of files.docImages) {
+                const url = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream(
+                        { folder: 'business/docs' },
+                        (error, result) => {
+                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                            else resolve(result.secure_url);
+                        }
+                    );
+                    stream.end(file.buffer);
+                });
+                docImageUrls.push(url as string);
+            }
+        }
+    }
+
     const newBusiness = await BusinessModel.create({
-        businessName: businessName,
+        businessName,
         description,
+        taxCode,
+        email,
+        address,
+        businessSector,
+        logo: logoUrl,
+        docImages: docImageUrls,
+        representative: {
+            name: representativeName,
+            phone: representativePhone,
+            email: representativeEmail,
+            address: representativeAddress
+        },
         createdBy: createdBy,
         isVerified: false
     });
@@ -262,6 +322,25 @@ export const createInstructorVerificationRequest = catchAsync(
             return next(new ErrorHandler('A instructor verification request is already pending.', 400));
         }
 
+        // Xử lý upload docImages lên Cloudinary
+        let docImageUrls: string[] = [];
+        if (req.files && (req.files as any).docImages) {
+            const files = (req.files as { [fieldname: string]: Express.Multer.File[] }).docImages;
+            for (const file of files) {
+                const url = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream(
+                        { folder: 'instructor/docs' },
+                        (error, result) => {
+                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                            else resolve(result.secure_url);
+                        }
+                    );
+                    stream.end(file.buffer);
+                });
+                docImageUrls.push(url as string);
+            }
+        }
+
         // Create new request
         const newRequest = await RequestModel.create({
             userId: createdBy,
@@ -278,7 +357,7 @@ export const createInstructorVerificationRequest = catchAsync(
                 experience,
                 role,
                 company,
-                documents //
+                documents: docImageUrls
             }
         });
 
