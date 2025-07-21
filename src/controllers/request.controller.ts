@@ -228,3 +228,111 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
         message: `Business verification request has been ${request.status} and notification sent.`
     });
 });
+
+// Create instructor verification request
+export const createInstructorVerificationRequest = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const {
+            fullName,
+            email,
+            phoneNumber,
+            dob,
+            address,
+            category,
+            description,
+            experience,
+            role,
+            company,
+            documents // use middleware to upload
+        } = req.body;
+        const createdBy = req.user?._id || req.body.userId;
+
+        if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
+        if (!fullName || !email || !phoneNumber || !dob || !address || !category || !description) {
+            return next(new ErrorHandler('Missing required fields', 400));
+        }
+
+        // Check status is pending
+        const existingRequest = await RequestModel.findOne({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending'
+        });
+        if (existingRequest) {
+            return next(new ErrorHandler('A instructor verification request is already pending.', 400));
+        }
+
+        // Create new request
+        const newRequest = await RequestModel.create({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending',
+            data: {
+                fullName,
+                email,
+                phoneNumber,
+                dob,
+                address,
+                category,
+                description,
+                experience,
+                role,
+                company,
+                documents //
+            }
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Instructor verification request has been submitted.',
+            data: newRequest
+        });
+    }
+);
+
+export const handleRequestActionInstructor = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { requestId } = req.params;
+    const { action } = req.body;
+
+    if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
+    if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
+
+    const request = await RequestModel.findById(requestId);
+    if (!request) return next(new ErrorHandler('Request not found', 404));
+    if (request.type !== 'instructor_verification') {
+        return next(new ErrorHandler('This is not an instructor verification request', 400));
+    }
+
+    request.status = action === 'approve' ? 'approved' : 'rejected';
+    await request.save();
+
+    // Nếu approve, cập nhật user thành instructor
+    if (action === 'approve') {
+        await UserModel.findByIdAndUpdate(
+            request.userId,
+            { role: 'instructor' }, // hoặc cập nhật trường phù hợp
+            { new: true }
+        );
+    }
+    // Gửi mail cho user (nếu muốn)
+    const user = await UserModel.findById(request.userId);
+    if (user) {
+        await sendMail({
+            email: user.email,
+            subject: action === 'approve' ? 'Instructor Verification Approved' : 'Instructor Verification Rejected',
+            template: action === 'approve' ? 'approved-instructor-mail.ejs' : 'reject-instructor-mail.ejs',
+            data: {
+                user: { name: user.name },
+                rejectionReason:
+                    action === 'reject' ? 'Your instructor verification request did not meet the requirements.' : ''
+            }
+        });
+    }
+    // Xóa request sau khi xử lý
+    await RequestModel.findByIdAndDelete(requestId);
+
+    res.status(200).json({
+        success: true,
+        message: `Instructor verification request has been ${request.status}.`
+    });
+});
