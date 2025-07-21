@@ -229,47 +229,13 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
     });
 });
 
-// Tạo request xác thực instructor
-export const createInstructorVerificationRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const {
-        fullName,
-        email,
-        phone,
-        dob,
-        address,
-        category,
-        description,
-        experience,
-        role,
-        company,
-        documents // nếu có upload file, dùng middleware upload
-    } = req.body;
-    const createdBy = req.user?._id || req.body.userId;
-
-    if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
-    if (!fullName || !email || !phone || !dob || !address || !category || !description) {
-        return next(new ErrorHandler('Missing required fields', 400));
-    }
-
-    // Kiểm tra đã có request pending chưa
-    const existingRequest = await RequestModel.findOne({
-        userId: createdBy,
-        type: 'instructor_verification',
-        status: 'pending'
-    });
-    if (existingRequest) {
-        return next(new ErrorHandler('A instructor verification request is already pending.', 400));
-    }
-
-    // Tạo request mới
-    const newRequest = await RequestModel.create({
-        userId: createdBy,
-        type: 'instructor_verification',
-        status: 'pending',
-        data: {
+// Create instructor verification request
+export const createInstructorVerificationRequest = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const {
             fullName,
             email,
-            phone,
+            phoneNumber,
             dob,
             address,
             category,
@@ -277,16 +243,52 @@ export const createInstructorVerificationRequest = catchAsync(async (req: Reques
             experience,
             role,
             company,
-            documents // nếu có
-        }
-    });
+            documents // use middleware to upload
+        } = req.body;
+        const createdBy = req.user?._id || req.body.userId;
 
-    res.status(201).json({
-        success: true,
-        message: 'Instructor verification request has been submitted.',
-        data: newRequest
-    });
-});
+        if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
+        if (!fullName || !email || !phoneNumber || !dob || !address || !category || !description) {
+            return next(new ErrorHandler('Missing required fields', 400));
+        }
+
+        // Check status is pending
+        const existingRequest = await RequestModel.findOne({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending'
+        });
+        if (existingRequest) {
+            return next(new ErrorHandler('A instructor verification request is already pending.', 400));
+        }
+
+        // Create new request
+        const newRequest = await RequestModel.create({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending',
+            data: {
+                fullName,
+                email,
+                phoneNumber,
+                dob,
+                address,
+                category,
+                description,
+                experience,
+                role,
+                company,
+                documents //
+            }
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Instructor verification request has been submitted.',
+            data: newRequest
+        });
+    }
+);
 
 export const handleRequestActionInstructor = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { requestId } = req.params;
@@ -312,10 +314,20 @@ export const handleRequestActionInstructor = catchAsync(async (req: Request, res
             { new: true }
         );
     }
-
     // Gửi mail cho user (nếu muốn)
-    // ...
-
+    const user = await UserModel.findById(request.userId);
+    if (user) {
+        await sendMail({
+            email: user.email,
+            subject: action === 'approve' ? 'Instructor Verification Approved' : 'Instructor Verification Rejected',
+            template: action === 'approve' ? 'approved-instructor-mail.ejs' : 'reject-instructor-mail.ejs',
+            data: {
+                user: { name: user.name },
+                rejectionReason:
+                    action === 'reject' ? 'Your instructor verification request did not meet the requirements.' : ''
+            }
+        });
+    }
     // Xóa request sau khi xử lý
     await RequestModel.findByIdAndDelete(requestId);
 
