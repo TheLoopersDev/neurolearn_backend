@@ -21,7 +21,7 @@ export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response,
     const business = await BusinessModel.findById(businessId);
     if (!business) return next(new ErrorHandler('Business not found', 404));
 
-    const user = await UserModel.findOne({ email });
+    const user = await UserModel.findOne({ email: email.toLowerCase() });
     if (!user) return next(new ErrorHandler('User not found', 404));
 
     const alreadyInBusiness = business.employees.some((emp: any) => emp.user.toString() === user._id.toString());
@@ -366,7 +366,15 @@ export const getEmployeesInBusiness = catchAsync(async (req: Request, res: Respo
         return next(new ErrorHandler('You do not have permission to view this data', 403));
     }
 
-    const filteredEmployees = business.employees.filter((emp: any) => allowedRolesToView.includes(emp.role));
+    const filteredEmployees = business.employees
+        .filter((emp: any) => allowedRolesToView.includes(emp.role))
+        .map((emp: any) => ({
+            _id: emp._id,
+            role: emp.role,
+            createdAt: emp.createdAt,
+            user: emp.user,
+            avatar: emp.user.avatar
+        }));
 
     res.status(200).json({
         success: true,
@@ -418,7 +426,7 @@ export const removeEmployeeFromBusiness = catchAsync(async (req: Request, res: R
 
     // ✅ Cập nhật user: gỡ liên kết businessInfo nếu có
     await UserModel.findByIdAndUpdate(employeeId, {
-        $unset: { businessInfo: '' }
+        $unset: { businessInfo: '', assignedCourses: '' }
     });
 
     res.status(200).json({
