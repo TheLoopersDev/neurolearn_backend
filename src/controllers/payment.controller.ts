@@ -38,13 +38,11 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             extraData: JSON.stringify({ userId, courseIds })
         } as any);
 
-        // Xác định userType
         const userType =
             req.user?.businessInfo?.role === 'admin' || req.user?.businessInfo?.role === 'manager'
                 ? 'business'
                 : 'user';
 
-        // Lưu đơn hàng
         await Order.create({
             userId,
             courseIds: courseIds.map((id: string) => new mongoose.Types.ObjectId(id)),
@@ -67,74 +65,77 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         const rawBody = req.body.toString('utf8');
         const signature = req.headers['x-signature'] as string;
 
-        // ✅ Uncomment nếu cần verify chữ ký
-        // const isValid = verifyWebhookSignature(rawBody, signature);
-        // if (!isValid) {
+        // Optionally verify webhook signature
+        // if (!verifyWebhookSignature(rawBody, signature)) {
         //     console.warn('❌ Webhook bị giả mạo');
         //     res.status(400).send('Invalid signature');
         //     return;
         // }
 
         const webhookData = JSON.parse(rawBody);
+        const { code, data } = webhookData;
 
-        if (webhookData?.code === '00' && webhookData?.data?.orderCode) {
-            const orderCode = webhookData.data.orderCode;
+        if (code !== '00' || !data?.orderCode) {
+            res.sendStatus(400);
+            return;
+        }
 
-            const order = await Order.findOne({ orderCode });
-            if (!order) {
-                console.warn('❌ Không tìm thấy đơn hàng với orderCode:', orderCode);
-                res.status(404).send('Order not found');
+        const orderCode = data.orderCode;
+        const order = await Order.findOne({ orderCode });
+        if (!order) {
+            console.warn('❌ Không tìm thấy đơn hàng:', orderCode);
+            res.status(404).send('Order not found');
+            return;
+        }
+
+        const user = await User.findById(order.userId);
+        if (!user) {
+            console.warn('❌ Không tìm thấy người dùng:', order.userId);
+            res.status(404).send('User not found');
+            return;
+        }
+
+        const licenseQuantities = order.licenseQuantities || {};
+        const role = user.businessInfo?.role;
+        const isBusiness = ['admin', 'manager'].includes(role);
+
+        if (isBusiness) {
+            const business = await BusinessModel.findOne({ _id: user.businessInfo.businessId });
+            if (!business) {
+                console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
+                res.status(404).send('Business not found');
                 return;
             }
 
-            const user = await User.findById(order.userId);
-            if (!user) {
-                console.warn('❌ Không tìm thấy người dùng:', order.userId);
-                res.status(404).send('User not found');
-                return;
+            for (const [courseIdStr, quantity] of Object.entries(licenseQuantities)) {
+                const courseId = new mongoose.Types.ObjectId(courseIdStr);
+                const existingCourse = business.courses.find((c: any) => c.course.toString() === courseId.toString());
+
+                if (existingCourse) {
+                    existingCourse.totalLicenses += quantity;
+                } else {
+                    business.courses.push({ course: courseId, totalLicenses: quantity });
+                }
+
+                await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
             }
 
-            const role = user.businessInfo?.role;
-            const isBusiness = role === 'admin' || role === 'manager';
+            await business.save();
+        } else {
+            const courseIds = Object.keys(licenseQuantities).map((id) => new mongoose.Types.ObjectId(id));
 
-            if (isBusiness) {
-                const business = await BusinessModel.findOne({ 'employees.user': user._id });
-                if (!business) {
-                    console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
-                    res.status(404).send('Business not found');
-                    return;
-                }
+            const newCourseIds = courseIds.filter(
+                (id) => !user.purchasedCourses.some((existingId: any) => existingId.toString() === id.toString())
+            );
 
-                for (const item of order.licenseQuantities || []) {
-                    const courseId = new mongoose.Types.ObjectId(item.courseId);
-                    const quantity = item.quantity;
-
-                    const existingCourse = business.courses.find(
-                        (c: any) => c.course.toString() === courseId.toString()
-                    );
-
-                    if (existingCourse) {
-                        existingCourse.license += quantity;
-                    } else {
-                        business.courses.push({ course: courseId, license: quantity });
-                    }
-
-                    await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
-                }
-
-                await business.save();
-            } else {
-                const courseIds = order.courseIds.map((id: any) => new mongoose.Types.ObjectId(id));
-
-                user.purchasedCourses.push(...courseIds);
+            if (newCourseIds.length > 0) {
+                user.purchasedCourses.push(...newCourseIds);
                 await user.save();
-
-                await Promise.all(
-                    courseIds.map(async (courseId: any) => {
-                        await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } });
-                    })
-                );
             }
+
+            await Promise.all(
+                courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
+            );
         }
 
         res.sendStatus(200);
