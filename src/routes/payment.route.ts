@@ -11,6 +11,8 @@ const router = express.Router();
  *   post:
  *     summary: Tạo link thanh toán PayOS
  *     tags: [Payment]
+ *     security:
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -21,22 +23,26 @@ const router = express.Router();
  *               - amount
  *               - description
  *               - courseIds
- *               - userId
  *             properties:
  *               amount:
  *                 type: number
  *                 example: 100000
  *               description:
  *                 type: string
- *                 example: "Thanh toán khóa học lập trình"
+ *                 example: "Thanh toán khóa học React"
  *               courseIds:
  *                 type: array
  *                 items:
  *                   type: string
- *                 example: ["66512f221e3efb486f7a4082"]
- *               userId:
- *                 type: string
- *                 example: "6650e7f4c8b57965b0a9bc01"
+ *                 example: ["66512f221e3efb486f7a4082", "66512f221e3efb486f7a4083"]
+ *               licenseQuantities:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: number
+ *                 example: {
+ *                   "66512f221e3efb486f7a4082": 5,
+ *                   "66512f221e3efb486f7a4083": 2
+ *                 }
  *     responses:
  *       200:
  *         description: Trả về URL thanh toán
@@ -48,6 +54,8 @@ const router = express.Router();
  *                 checkoutUrl:
  *                   type: string
  *                   example: "https://sandbox.payos.vn/payment-link/abcxyz"
+ *       400:
+ *         description: Thiếu trường bắt buộc hoặc dữ liệu không hợp lệ
  *       500:
  *         description: Lỗi server
  */

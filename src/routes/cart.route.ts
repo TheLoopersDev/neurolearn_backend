@@ -1,5 +1,11 @@
 import express from 'express';
-import { addToCart, clearCart, getCartItems, removeCartItem } from '../controllers/cart.controller';
+import {
+    addToCart,
+    clearCart,
+    getCartItems,
+    removeCartItem,
+    updateCartItemQuantity
+} from '../controllers/cart.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
 
@@ -127,5 +133,51 @@ router.get('/cart-items', updateAccessToken, isAuthenticated, getCartItems);
  *         description: Item not found in cart or cart not found
  */
 router.delete('/remove-item', updateAccessToken, isAuthenticated, removeCartItem);
+
+/**
+ * @swagger
+ * /api/cart/update-quantity:
+ *   put:
+ *     summary: Update quantity of a course in the cart
+ *     tags: [Cart]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - courseId
+ *               - quantity
+ *             properties:
+ *               courseId:
+ *                 type: string
+ *                 description: ID of the course to update
+ *               quantity:
+ *                 type: number
+ *                 minimum: 1
+ *                 description: New quantity of the course
+ *     responses:
+ *       200:
+ *         description: Quantity updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid input
+ *       401:
+ *         description: User not authenticated
+ *       404:
+ *         description: Cart or item not found
+ */
+router.put('/update-quantity', updateAccessToken, isAuthenticated, updateCartItemQuantity);
 
 export default router;
