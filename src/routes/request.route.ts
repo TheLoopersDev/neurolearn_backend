@@ -102,10 +102,6 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
-    upload.fields([
-        { name: 'logo', maxCount: 1 },
-        { name: 'docImages', maxCount: 10 }
-    ]),
     createBusinessVerificationRequest
 );
 
