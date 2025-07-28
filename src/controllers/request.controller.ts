@@ -190,7 +190,7 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
         isVerified: false
     });
 
-    const newRequest = await RequestModel.create({
+    await RequestModel.create({
         businessId: newBusiness._id,
         userId: createdBy,
         type: 'business_verification',
@@ -251,6 +251,15 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
     // Nếu approve thì cập nhật isVerified
     if (action === 'approve') {
         business.isVerified = true;
+        const isExist = business.employees.some((emp: any) => emp.user.toString() === request.userId.toString());
+        if (!isExist) {
+            business.employees.push({
+                user: request.userId,
+                role: 'admin',
+                createdAt: new Date()
+            });
+        }
+
         await business.save();
         await UserModel.findByIdAndUpdate(
             request.userId,
