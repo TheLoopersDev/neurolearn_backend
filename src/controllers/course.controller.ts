@@ -906,6 +906,8 @@ interface IAddAnswerData {
 
 interface CourseFilter {
     isPublished: boolean;
+    name?: string | { $regex: string; $options: string };
+    subTitle?: string | { $regex: string; $options: string };
     level?: mongoose.Types.ObjectId;
     category?: mongoose.Types.ObjectId;
     subCategory?: mongoose.Types.ObjectId;
@@ -913,6 +915,7 @@ interface CourseFilter {
     rating?: number;
     language?: string;
     price?: any;
+    $or?: Array<Partial<Pick<CourseFilter, 'name' | 'subTitle'>>>;
 }
 
 export const addAnswer = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -1141,6 +1144,10 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
     const skip = (page - 1) * limit;
 
     const filter: CourseFilter = { isPublished: true };
+    if (req.query.search) {
+        const search = req.query.search as string;
+        filter.$or = [{ name: { $regex: search, $options: 'i' } }, { subTitle: { $regex: search, $options: 'i' } }];
+    }
 
     if (req.query.level) {
         const levelDoc = await LevelModel.findOne({ name: new RegExp(`^${req.query.level}$`, 'i') });
@@ -1162,7 +1169,6 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
         if (authorDoc) filter.authorId = authorDoc._id;
     }
 
-    // Filter rating
     if (req.query.rating) {
         const rating = parseInt(req.query.rating as string, 10);
         if (!isNaN(rating) && rating >= 1 && rating <= 5) {
@@ -1170,12 +1176,10 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
         }
     }
 
-    // Filter language
     if (req.query.language) {
         filter.language = req.query.language as string;
     }
 
-    // Filter price (Free or Paid)
     if (req.query.price) {
         if (req.query.price === 'Free') {
             filter.price = 0;
@@ -1184,13 +1188,45 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
         }
     }
 
-    const courses = await CourseModel.find(filter)
-        .select('-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links')
-        .populate('authorId', 'name')
-        .skip(skip)
-        .limit(limit);
-
     const totalCourses = await CourseModel.countDocuments(filter);
+
+    const rawCourses = await CourseModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('authorId', 'name email avatar profession')
+        .populate('category', 'name')
+        .lean();
+
+    const coursesWithDetails = await Promise.all(
+        rawCourses.map(async (course) => {
+            const sectionIds = course.sections || [];
+
+            const sections = await SectionModel.find({ _id: { $in: sectionIds } })
+                .select('lessons')
+                .lean();
+
+            const totalSections = sections.length;
+            const lessonIds = sections.flatMap((section) => section.lessons);
+            const totalLessons = lessonIds.length;
+
+            return {
+                _id: course._id,
+                name: course.name,
+                subTitle: course.subTitle,
+                thumbnail: course.thumbnail ? { url: course.thumbnail.url } : null,
+                author: course.authorId,
+                category: course.category,
+                rating: course.rating,
+                price: course.price,
+                estimatedPrice: course.estimatedPrice,
+                purchased: course.purchased,
+                duration: (course.duration / 60).toFixed(1) + ' hours',
+                totalSections,
+                totalLessons
+            };
+        })
+    );
 
     res.status(200).json({
         success: true,
@@ -1198,7 +1234,7 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
         limit,
         totalCourses,
         totalPages: Math.ceil(totalCourses / limit),
-        courses
+        courses: coursesWithDetails
     });
 });
 
