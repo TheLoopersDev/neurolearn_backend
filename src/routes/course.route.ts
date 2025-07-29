@@ -49,6 +49,22 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/courses/user-courses:
+ *   get:
+ *     summary: Get courses by user
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of user's courses
+ *       401:
+ *         description: Not authenticated
+ */
+router.get('/user-courses', isAuthenticated, updateAccessToken, getCoursesByUser, getUserInfo);
+
+/**
+ * @swagger
  * /api/courses/sort:
  *   get:
  *     summary: Get sorted courses
@@ -226,22 +242,6 @@ router.post('/sign-delete', getSignatureForDelete);
  *         description: Course not found
  */
 router.get('/:id', getSingleCourse, getUserInfo);
-
-/**
- * @swagger
- * /api/courses/user-courses:
- *   get:
- *     summary: Get courses by user
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of user's courses
- *       401:
- *         description: Not authenticated
- */
-router.get('/user-courses', isAuthenticated, updateAccessToken, getCoursesByUser, getUserInfo);
 
 /**
  * @swagger
