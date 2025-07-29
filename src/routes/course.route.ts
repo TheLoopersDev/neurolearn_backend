@@ -83,6 +83,232 @@ router.get('/sort', getCoursesWithSort as RequestHandler);
 
 /**
  * @swagger
+ * /api/courses/pagination:
+ *   get:
+ *     summary: Get paginated courses
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: Paginated list of courses
+ */
+router.get('/pagination', getCoursesLimitWithPagination);
+
+/**
+ * @swagger
+ * /api/courses/search:
+ *   post:
+ *     summary: Search courses and instructors
+ *     tags: [Courses]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - searchTerm
+ *             properties:
+ *               searchTerm:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Search results
+ */
+router.post('/search', searchCoursesAndInstructors);
+
+/**
+ * @swagger
+ * /api/courses/top-courses:
+ *   get:
+ *     summary: Get top rated courses
+ *     tags: [Courses]
+ *     responses:
+ *       200:
+ *         description: List of top rated courses
+ */
+router.get('/top-courses', getTopCourses);
+
+/**
+ * @swagger
+ * /api/courses/course-data/{id}:
+ *   get:
+ *     summary: Get course by ID
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course details
+ *       404:
+ *         description: Course not found
+ */
+router.get('/course-data/:id', getSingleCourseFullDetail);
+
+/**
+ * @swagger
+ * /api/courses/{id}:
+ *   get:
+ *     summary: Get course by ID
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course details
+ *       404:
+ *         description: Course not found
+ */
+router.get('/course/:id', getCourseById);
+
+/**
+ * @swagger
+ * /api/courses:
+ *   get:
+ *     summary: Get all courses without purchase
+ *     tags: [Courses]
+ *     responses:
+ *       200:
+ *         description: List of all courses
+ */
+router.get('/', getAllCoursesWithoutPurchase);
+
+/**
+ * @swagger
+ * /api/courses/sign-upload:
+ *   post:
+ *     summary: Get signature for video upload
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Signature generated successfully
+ *       401:
+ *         description: Not authenticated
+ */
+router.post('/sign-upload', generateVideoCloudinarySignature);
+
+/**
+ * @swagger
+ * /api/courses/sign-delete:
+ *   post:
+ *     summary: Get signature for video deletion
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Signature generated successfully
+ *       401:
+ *         description: Not authenticated
+ */
+router.post('/sign-delete', getSignatureForDelete);
+
+/**
+ * @swagger
+ * /api/courses/{id}:
+ *   get:
+ *     summary: Get course by ID
+ *     tags: [Courses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course details
+ *       404:
+ *         description: Course not found
+ */
+router.get('/:id', getSingleCourse, getUserInfo);
+
+/**
+ * @swagger
+ * /api/courses/purchased/my-course:
+ *   get:
+ *     summary: Get all purchased courses of current user
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of purchased courses
+ *       401:
+ *         description: Not authenticated
+ */
+router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPurchasedCoursesOfUser);
+
+/**
+ * @swagger
+ * /api/courses/purchased/{id}:
+ *   get:
+ *     summary: Get purchased course by ID
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Purchased course details
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Course not found
+ */
+router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
+
+/**
+ * @swagger
+ * /api/courses/uploaded/{id}:
+ *   get:
+ *     summary: Get uploaded course by instructor
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Uploaded course details
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Course not found
+ */
+router.get('/uploaded/:id', isAuthenticated, updateAccessToken, getUploadedCourseByInstructor);
+
+/**
+ * @swagger
  * /api/courses/create-course:
  *   post:
  *     summary: Create a new course
@@ -203,182 +429,6 @@ router.put('/publish-course/:id', isAuthenticated, updateAccessToken, publishCou
  *         description: Course not found
  */
 router.put('/unpublish-course/:id', isAuthenticated, updateAccessToken, unpublishCourse);
-
-/**
- * @swagger
- * /api/courses/pagination:
- *   get:
- *     summary: Get paginated courses
- *     tags: [Courses]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: Paginated list of courses
- */
-router.get('/pagination', getCoursesLimitWithPagination);
-
-/**
- * @swagger
- * /api/courses/search:
- *   post:
- *     summary: Search courses and instructors
- *     tags: [Courses]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - searchTerm
- *             properties:
- *               searchTerm:
- *                 type: string
- *     responses:
- *       200:
- *         description: Search results
- */
-router.post('/search', searchCoursesAndInstructors);
-
-/**
- * @swagger
- * /api/courses/top-courses:
- *   get:
- *     summary: Get top rated courses
- *     tags: [Courses]
- *     responses:
- *       200:
- *         description: List of top rated courses
- */
-router.get('/top-courses', getTopCourses);
-
-/**
- * @swagger
- * /api/courses/course-data/{id}:
- *   get:
- *     summary: Get course by ID
- *     tags: [Courses]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Course details
- *       404:
- *         description: Course not found
- */
-router.get('/course-data/:id', getSingleCourseFullDetail);
-/**
- * @swagger
- * /api/courses/{id}:
- *   get:
- *     summary: Get course by ID
- *     tags: [Courses]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Course details
- *       404:
- *         description: Course not found
- */
-router.get('/:id', isAuthenticated, updateAccessToken, getSingleCourse);
-
-/**
- * @swagger
- * /api/courses:
- *   get:
- *     summary: Get all courses without purchase
- *     tags: [Courses]
- *     responses:
- *       200:
- *         description: List of all courses
- */
-
-router.get('/course/:id', getCourseById);
-
-router.get('/', getAllCoursesWithoutPurchase);
-
-/**
- * @swagger
- * /api/courses/purchased/my-course:
- *   get:
- *     summary: Get all purchased courses of current user
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of purchased courses
- *       401:
- *         description: Not authenticated
- */
-router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPurchasedCoursesOfUser);
-
-/**
- * @swagger
- * /api/courses/purchased/{id}:
- *   get:
- *     summary: Get purchased course by ID
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Purchased course details
- *       401:
- *         description: Not authenticated
- *       404:
- *         description: Course not found
- */
-router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
-
-/**
- * @swagger
- * /api/courses/uploaded/{id}:
- *   get:
- *     summary: Get uploaded course by instructor
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Uploaded course details
- *       401:
- *         description: Not authenticated
- *       404:
- *         description: Course not found
- */
-router.get('/uploaded/:id', isAuthenticated, updateAccessToken, getUploadedCourseByInstructor);
 
 /**
  * @swagger
@@ -623,9 +673,9 @@ router.put('/create-section/:id', isAuthenticated, updateAccessToken, createSect
 
 /**
  * @swagger
- * /api/courses/reorder-section/{id}:
+ * /api/courses/update-section/{id}:
  *   put:
- *     summary: Reorder sections in course
+ *     summary: Update section
  *     tags: [Courses]
  *     security:
  *       - bearerAuth: []
@@ -659,7 +709,6 @@ router.put('/create-section/:id', isAuthenticated, updateAccessToken, createSect
  *       401:
  *         description: Not authenticated
  */
-
 router.put('/update-section/:id', isAuthenticated, updateAccessToken, updateSection);
 
 /**
@@ -907,37 +956,5 @@ router.put('/unpublish-section/:id', isAuthenticated, updateAccessToken, unpubli
  *         description: Not authenticated
  */
 router.put('/delete-section/:id', isAuthenticated, updateAccessToken, deleteSection);
-
-/**
- * @swagger
- * /api/courses/sign-upload:
- *   post:
- *     summary: Get signature for video upload
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Signature generated successfully
- *       401:
- *         description: Not authenticated
- */
-router.post('/sign-upload', generateVideoCloudinarySignature);
-
-/**
- * @swagger
- * /api/courses/sign-delete:
- *   post:
- *     summary: Get signature for video deletion
- *     tags: [Courses]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Signature generated successfully
- *       401:
- *         description: Not authenticated
- */
-router.post('/sign-delete', getSignatureForDelete);
 
 export = router;
