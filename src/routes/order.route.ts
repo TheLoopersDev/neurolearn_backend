@@ -17,7 +17,7 @@ router.post('/create-order', updateAccessToken, isAuthenticated, createOrder);
 
 router.get('/get-orders', isAuthenticated, authorizeRoles('admin'), getAllOrders);
 
-router.get('/user-orders', updateAccessToken, isAuthenticated, getUserOrders);
+router.post('/user-orders', updateAccessToken, isAuthenticated, getUserOrders);
 
 router.get('/:id', updateAccessToken, isAuthenticated, getOrder);
 
