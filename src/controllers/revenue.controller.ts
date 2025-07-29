@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import * as revenueService from '../services/revenue.service';
 import { catchAsync } from '../utils/catchAsync';
 import Revenue from '../models/Revenue.model';
 

@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import CourseModel from '../models/Course.model';
 import BusinessModel from '../models/Business.model';
+import RevenueModel from '@/models/Revenue.model';
 
 dotenv.config();
 
@@ -65,11 +66,11 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         const rawBody = req.body.toString('utf8');
         const signature = req.headers['x-signature'] as string;
 
-        // Optionally verify webhook signature
+        // Optional: verify webhook signature
         // if (!verifyWebhookSignature(rawBody, signature)) {
-        //     console.warn('❌ Webhook bị giả mạo');
-        //     res.status(400).send('Invalid signature');
-        //     return;
+        //   console.warn('❌ Webhook bị giả mạo');
+        //   res.status(400).send('Invalid signature');
+        //   return;
         // }
 
         const webhookData = JSON.parse(rawBody);
@@ -121,6 +122,9 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             }
 
             await business.save();
+
+            // ✅ Cập nhật doanh thu cho business purchases
+            await updateRevenueForCourses(licenseQuantities);
         } else {
             const courseIds = Object.keys(licenseQuantities).map((id) => new mongoose.Types.ObjectId(id));
 
@@ -136,11 +140,38 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             await Promise.all(
                 courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
             );
+
+            // ✅ Cập nhật doanh thu cho purchases cá nhân
+            await updateRevenueForCourses(licenseQuantities);
         }
 
         res.sendStatus(200);
     } catch (error) {
         console.error('❌ Lỗi xử lý webhook:', error);
         res.sendStatus(500);
+    }
+};
+
+const updateRevenueForCourses = async (licenseQuantities: Record<string, number>): Promise<void> => {
+    for (const courseIdStr of Object.keys(licenseQuantities)) {
+        const quantity = licenseQuantities[courseIdStr] || 1;
+        const courseId = new mongoose.Types.ObjectId(courseIdStr);
+
+        const course = await CourseModel.findById(courseId).select('authorId price');
+        if (!course) continue;
+
+        const revenue = await RevenueModel.findOne({ user: course.authorId });
+
+        if (revenue) {
+            revenue.total += course.price * quantity;
+            revenue.updatedAt = new Date();
+            await revenue.save();
+        } else {
+            await RevenueModel.create({
+                user: course.authorId,
+                total: course.price * quantity,
+                updatedAt: new Date()
+            });
+        }
     }
 };
