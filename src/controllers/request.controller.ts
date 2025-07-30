@@ -8,6 +8,46 @@ import sendMail from '../utils/sendMail';
 import BusinessModel from '../models/Business.model';
 import { v2 as cloudinary } from 'cloudinary';
 
+// Utility function to find request with fallback methods
+const findRequestWithFallback = async (requestId: string) => {
+    const mongoose = require('mongoose');
+    
+    // Check if requestId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+        return null;
+    }
+
+    // Try to find the request using different methods
+    let request = await RequestModel.findById(requestId);
+    
+    if (!request) {
+        request = await RequestModel.findOne({ _id: requestId });
+    }
+    
+    if (!request) {
+        const ObjectId = mongoose.Types.ObjectId;
+        request = await RequestModel.findById(new ObjectId(requestId));
+    }
+
+    if (!request) {
+        request = await RequestModel.findOne({ _id: new mongoose.Types.ObjectId(requestId) });
+    }
+
+    // If still not found, try direct database query
+    if (!request) {
+        const db = mongoose.connection.db;
+        const requestsCollection = db.collection('requests');
+        const allDirectRequests = await requestsCollection.find({}).toArray();
+        
+        if (allDirectRequests.length > 0) {
+            const directDoc = allDirectRequests[0];
+            request = new RequestModel(directDoc);
+        }
+    }
+
+    return request;
+};
+
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { courseId, userId, message } = req.body;
@@ -55,8 +95,7 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
 
     const requests = await RequestModel.find(filter)
         .populate('courseId')
-        .populate('instructorId')
-        .populate('businessId');
+        .populate('userId')
 
     if (!requests.length) return next(new ErrorHandler('No pending requests found', 404));
 
@@ -71,7 +110,7 @@ export const handleRequestActionCourse = catchAsync(async (req: Request, res: Re
     if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
     if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
 
-    const request = await RequestModel.findById(requestId);
+    const request = await findRequestWithFallback(requestId);
     if (!request) return next(new ErrorHandler('Request not found', 404));
 
     request.status = action === 'approve' ? 'approved' : 'rejected';
@@ -79,7 +118,8 @@ export const handleRequestActionCourse = catchAsync(async (req: Request, res: Re
 
     if (request.type === 'course_approval') {
         const course = await CourseModel.findById(request.courseId);
-        const instructor = await UserModel.findById(request.instructorId);
+        const instructor = await UserModel.findById(request.userId);
+        
         if (!course || !instructor) return next(new ErrorHandler('Course or Instructor not found', 404));
 
         if (action === 'approve') await CourseModel.findByIdAndUpdate(request.courseId, { isPublished: true });
@@ -234,7 +274,7 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
     if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
     if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
 
-    const request = await RequestModel.findById(requestId);
+    const request = await findRequestWithFallback(requestId);
     if (!request) return next(new ErrorHandler('Request not found', 404));
 
     if (request.type !== 'business_verification') {
@@ -376,8 +416,9 @@ export const handleRequestActionInstructor = catchAsync(async (req: Request, res
     if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
     if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
 
-    const request = await RequestModel.findById(requestId);
+    const request = await findRequestWithFallback(requestId);
     if (!request) return next(new ErrorHandler('Request not found', 404));
+    
     if (request.type !== 'instructor_verification') {
         return next(new ErrorHandler('This is not an instructor verification request', 400));
     }

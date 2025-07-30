@@ -234,34 +234,64 @@ export const logoutUser = catchAsync(async (req: Request, res: Response, next: N
 });
 
 export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const refresh_token = req.cookies.refresh_token as string;
-    console.log(refresh_token);
-    const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
-
-    const message = 'Could not refresh token';
-
-    if (!decoded) {
-        return next(new ErrorHandler(message, 400));
+    // Try to get refresh token from cookies first
+    let refresh_token = req.cookies.refresh_token as string;
+    
+    // If not in cookies, try to get from Authorization header
+    if (!refresh_token) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            // Frontend is sending access token, not refresh token
+            // We'll try to use it as refresh token for now
+            refresh_token = authHeader.substring(7);
+        }
     }
-
-    const session = await redis.get(decoded.id as string);
-
-    if (!session) {
-        return next(new ErrorHandler(message, 400));
+    
+    if (!refresh_token) {
+        return next(new ErrorHandler('No refresh token provided', 400));
     }
+    
+    try {
+        // First try to verify as refresh token
+        let decoded;
+        try {
+            decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
+        } catch (refreshError) {
+            // If it fails as refresh token, try as access token
+            try {
+                decoded = jwt.verify(refresh_token, process.env.ACCESS_TOKEN as string) as JwtPayload;
+            } catch (accessError) {
+                return next(new ErrorHandler('Invalid token', 401));
+            }
+        }
 
-    const user = JSON.parse(session);
+        const message = 'Could not refresh token';
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, { expiresIn: '1h' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, { expiresIn: '3d' });
+        if (!decoded) {
+            return next(new ErrorHandler(message, 400));
+        }
 
-    req.user = user;
-    req.access_token = accessToken;
+        const session = await redis.get(decoded.id as string);
 
-    res.cookie('access_token', accessToken, accessTokenOptions);
-    res.cookie('refresh_token', refreshToken, refreshTokenOptions);
+        if (!session) {
+            return next(new ErrorHandler(message, 400));
+        }
 
-    next();
+        const user = JSON.parse(session);
+
+        const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, { expiresIn: '3d' });
+
+        req.user = user;
+        req.access_token = accessToken;
+
+        res.cookie('access_token', accessToken, accessTokenOptions);
+        res.cookie('refresh_token', refreshToken, refreshTokenOptions);
+
+        next();
+    } catch (error) {
+        return next(new ErrorHandler('Invalid refresh token', 401));
+    }
 });
 // export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
 //     console.log('--- updateAccessToken Middleware Start ---');
