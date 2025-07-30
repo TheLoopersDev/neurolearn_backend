@@ -63,87 +63,88 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
 export const payosWebhook = async (req: Request, res: Response): Promise<void> => {
     try {
-        const rawBody = req.body.toString('utf8');
-        const signature = req.headers['x-signature'] as string;
+        // const rawBody = req.body.toString('utf8');
+        // const signature = req.headers['x-signature'] as string;
 
-        // Optional: verify webhook signature
-        // if (!verifyWebhookSignature(rawBody, signature)) {
-        //   console.warn('❌ Webhook bị giả mạo');
-        //   res.status(400).send('Invalid signature');
-        //   return;
+        // const webhookData = JSON.parse(rawBody);
+        // console.log(webhookData);
+
+        // if (webhookData?.code !== '00' || !webhookData?.data?.orderCode) {
+        //     res.sendStatus(400);
+        //     return;
         // }
 
-        const webhookData = JSON.parse(rawBody);
-        const { code, data } = webhookData;
+        // const orderCode = webhookData?.data.orderCode;
+        // const order = await Order.findOne({ orderCode });
+        // if (!order) {
+        //     console.warn('❌ Không tìm thấy đơn hàng:', orderCode);
+        //     res.status(404).send('Order not found');
+        //     return;
+        // }
 
-        if (code !== '00' || !data?.orderCode) {
-            res.sendStatus(400);
-            return;
-        }
+        // const user = await User.findById(order.userId);
+        // if (!user) {
+        //     console.warn('❌ Không tìm thấy người dùng:', order.userId);
+        //     res.status(404).send('User not found');
+        //     return;
+        // }
 
-        const orderCode = data.orderCode;
-        const order = await Order.findOne({ orderCode });
-        if (!order) {
-            console.warn('❌ Không tìm thấy đơn hàng:', orderCode);
-            res.status(404).send('Order not found');
-            return;
-        }
+        // const licenseQuantitiesRaw = order.licenseQuantities;
 
-        const user = await User.findById(order.userId);
-        if (!user) {
-            console.warn('❌ Không tìm thấy người dùng:', order.userId);
-            res.status(404).send('User not found');
-            return;
-        }
+        // // Chuyển Map thành object nếu cần (hoặc convert từ Map -> array)
+        // const licenseQuantities: Record<string, number> =
+        //     licenseQuantitiesRaw instanceof Map
+        //         ? Object.fromEntries(Array.from(licenseQuantitiesRaw.entries()))
+        //         : licenseQuantitiesRaw || {};
 
-        const licenseQuantities = order.licenseQuantities || {};
-        const role = user.businessInfo?.role;
-        const isBusiness = ['admin', 'manager'].includes(role);
+        // const role = user.businessInfo?.role;
+        // const isBusiness = ['admin', 'manager'].includes(role);
 
-        if (isBusiness) {
-            const business = await BusinessModel.findOne({ _id: user.businessInfo.businessId });
-            if (!business) {
-                console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
-                res.status(404).send('Business not found');
-                return;
-            }
+        // if (isBusiness) {
+        //     const business = await BusinessModel.findOne({ _id: user.businessInfo.businessId });
+        //     if (!business) {
+        //         console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
+        //         res.status(404).send('Business not found');
+        //         return;
+        //     }
 
-            for (const [courseIdStr, quantity] of Object.entries(licenseQuantities)) {
-                const courseId = new mongoose.Types.ObjectId(courseIdStr);
-                const existingCourse = business.courses.find((c: any) => c.course.toString() === courseId.toString());
+        //     for (const [courseIdStr, quantity] of Object.entries(licenseQuantities)) {
+        //         if (!mongoose.Types.ObjectId.isValid(courseIdStr)) continue;
+        //         const courseId = new mongoose.Types.ObjectId(courseIdStr);
 
-                if (existingCourse) {
-                    existingCourse.totalLicenses += quantity;
-                } else {
-                    business.courses.push({ course: courseId, totalLicenses: quantity });
-                }
+        //         const existingCourse = business.courses.find((c: any) => c.course.toString() === courseId.toString());
 
-                await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
-            }
+        //         if (existingCourse) {
+        //             existingCourse.totalLicenses += quantity;
+        //         } else {
+        //             business.courses.push({ course: courseId, totalLicenses: quantity });
+        //         }
 
-            await business.save();
+        //         await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
+        //     }
 
-            // ✅ Cập nhật doanh thu cho business purchases
-            await updateRevenueForCourses(licenseQuantities);
-        } else {
-            const courseIds = Object.keys(licenseQuantities).map((id) => new mongoose.Types.ObjectId(id));
+        //     await business.save();
+        //     await updateRevenueForCourses(licenseQuantities);
+        // } else {
+        //     const courseIds = Object.keys(licenseQuantities)
+        //         .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        //         .map((id) => new mongoose.Types.ObjectId(id));
 
-            const newCourseIds = courseIds.filter(
-                (id) => !user.purchasedCourses.some((existingId: any) => existingId.toString() === id.toString())
-            );
+        //     const newCourseIds = courseIds.filter(
+        //         (id) => !user.purchasedCourses.some((existingId: any) => existingId.toString() === id.toString())
+        //     );
 
-            if (newCourseIds.length > 0) {
-                user.purchasedCourses.push(...newCourseIds);
-                await user.save();
-            }
+        //     if (newCourseIds.length > 0) {
+        //         user.purchasedCourses.push(...newCourseIds);
+        //         await user.save();
+        //     }
 
-            await Promise.all(
-                courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
-            );
+        //     await Promise.all(
+        //         courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
+        //     );
 
-            // ✅ Cập nhật doanh thu cho purchases cá nhân
-            await updateRevenueForCourses(licenseQuantities);
-        }
+        //     await updateRevenueForCourses(licenseQuantities);
+        // }
 
         res.sendStatus(200);
     } catch (error) {
