@@ -22,7 +22,7 @@ export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response,
     if (!business) return next(new ErrorHandler('Business not found', 404));
 
     const user = await UserModel.findOne({ email: email.toLowerCase() });
-    if (!user) return next(new ErrorHandler('User not found', 404));
+    if (!user) return next(new ErrorHandler('User not part of your business', 404));
 
     const alreadyInBusiness = business.employees.some((emp: any) => emp.user.toString() === user._id.toString());
     if (alreadyInBusiness) {
