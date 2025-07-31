@@ -5,6 +5,11 @@ const storage = multer.memoryStorage();
 export const upload = multer({
     storage,
     limits: {
-        fileSize: 500 * 1024 * 1024, // 500MB nếu cần
+        fileSize: 500 * 1024 * 1024,
     }
 });
+
+export const businessUpload = upload.fields([
+    { name: 'logo', maxCount: 1 },
+    { name: 'docImages', maxCount: 10 }
+]);
