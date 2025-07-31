@@ -1,8 +1,9 @@
 import jwt, { JwtPayload, JsonWebTokenError, TokenExpiredError, NotBeforeError } from 'jsonwebtoken';
-import { catchAsync } from '@/utils/catchAsync';
-import ErrorHandler from '@/utils/ErrorHandler';
+import { catchAsync } from '../../utils/catchAsync';
+import ErrorHandler from '../../utils/ErrorHandler';
 import { NextFunction, Request, Response } from 'express';
 import { redis } from '../../utils/redis';
+import { Types } from 'mongoose';
 
 export const isAuthenticated = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     // Try to get token from multiple sources
@@ -16,14 +17,8 @@ export const isAuthenticated = catchAsync(async (req: Request, res: Response, ne
         }
     }
 
-    if (authHeader && authHeader.startsWith('Bearer ') && authHeader !== 'Bearer session-based') {
-        token = authHeader.split(' ')[1];
-    } else {
-        token = req.cookies.access_token || req.headers['access_token'] || (req as any).access_token;
-    }
-
-    if (!token) {
-        return next(new ErrorHandler('You are not logged in. Please log in to access this resource.', 401));
+    if (!access_token) {
+        return next(new ErrorHandler('Please login to access this resource.', 400));
     }
 
     try {
