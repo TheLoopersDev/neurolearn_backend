@@ -4,7 +4,10 @@ import Order from '../models/Order.model';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import CourseModel from '../models/Course.model';
+import BusinessModel from '../models/Business.model';
 import RevenueModel from '../models/Revenue.model';
+import UserModel from '../models/User.model';
+
 
 dotenv.config();
 
@@ -61,88 +64,88 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
 export const payosWebhook = async (req: Request, res: Response): Promise<void> => {
     try {
-        // const rawBody = req.body.toString('utf8');
-        // const signature = req.headers['x-signature'] as string;
+        const rawBody = req.body.toString('utf8');
+        const signature = req.headers['x-signature'] as string;
 
-        // const webhookData = JSON.parse(rawBody);
-        // console.log(webhookData);
+        const webhookData = JSON.parse(rawBody);
+        console.log(webhookData);
 
-        // if (webhookData?.code !== '00' || !webhookData?.data?.orderCode) {
-        //     res.sendStatus(400);
-        //     return;
-        // }
+        if (webhookData?.code !== '00' || !webhookData?.data?.orderCode) {
+            res.sendStatus(400);
+            return;
+        }
 
-        // const orderCode = webhookData?.data.orderCode;
-        // const order = await Order.findOne({ orderCode });
-        // if (!order) {
-        //     console.warn('❌ Không tìm thấy đơn hàng:', orderCode);
-        //     res.status(404).send('Order not found');
-        //     return;
-        // }
+        const orderCode = webhookData?.data.orderCode;
+        const order = await Order.findOne({ orderCode });
+        if (!order) {
+            console.warn('❌ Không tìm thấy đơn hàng:', orderCode);
+            res.status(404).send('Order not found');
+            return;
+        }
 
-        // const user = await User.findById(order.userId);
-        // if (!user) {
-        //     console.warn('❌ Không tìm thấy người dùng:', order.userId);
-        //     res.status(404).send('User not found');
-        //     return;
-        // }
+        const user = await UserModel.findById(order.userId);
+        if (!user) {
+            console.warn('❌ Không tìm thấy người dùng:', order.userId);
+            res.status(404).send('User not found');
+            return;
+        }
 
-        // const licenseQuantitiesRaw = order.licenseQuantities;
+        const licenseQuantitiesRaw = order.licenseQuantities;
 
-        // // Chuyển Map thành object nếu cần (hoặc convert từ Map -> array)
-        // const licenseQuantities: Record<string, number> =
-        //     licenseQuantitiesRaw instanceof Map
-        //         ? Object.fromEntries(Array.from(licenseQuantitiesRaw.entries()))
-        //         : licenseQuantitiesRaw || {};
+        // Chuyển Map thành object nếu cần (hoặc convert từ Map -> array)
+        const licenseQuantities: Record<string, number> =
+            licenseQuantitiesRaw instanceof Map
+                ? Object.fromEntries(Array.from(licenseQuantitiesRaw.entries()))
+                : licenseQuantitiesRaw || {};
 
-        // const role = user.businessInfo?.role;
-        // const isBusiness = ['admin', 'manager'].includes(role);
+        const role = user.businessInfo?.role;
+        const isBusiness = ['admin', 'manager'].includes(role);
 
-        // if (isBusiness) {
-        //     const business = await BusinessModel.findOne({ _id: user.businessInfo.businessId });
-        //     if (!business) {
-        //         console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
-        //         res.status(404).send('Business not found');
-        //         return;
-        //     }
+        if (isBusiness) {
+            const business = await BusinessModel.findOne({ _id: user.businessInfo.businessId });
+            if (!business) {
+                console.warn('❌ Không tìm thấy doanh nghiệp cho user:', user._id);
+                res.status(404).send('Business not found');
+                return;
+            }
 
-        //     for (const [courseIdStr, quantity] of Object.entries(licenseQuantities)) {
-        //         if (!mongoose.Types.ObjectId.isValid(courseIdStr)) continue;
-        //         const courseId = new mongoose.Types.ObjectId(courseIdStr);
+            for (const [courseIdStr, quantity] of Object.entries(licenseQuantities)) {
+                if (!mongoose.Types.ObjectId.isValid(courseIdStr)) continue;
+                const courseId = new mongoose.Types.ObjectId(courseIdStr);
 
-        //         const existingCourse = business.courses.find((c: any) => c.course.toString() === courseId.toString());
+                const existingCourse = business.courses.find((c: any) => c.course.toString() === courseId.toString());
 
-        //         if (existingCourse) {
-        //             existingCourse.totalLicenses += quantity;
-        //         } else {
-        //             business.courses.push({ course: courseId, totalLicenses: quantity });
-        //         }
+                if (existingCourse) {
+                    existingCourse.totalLicenses += quantity;
+                } else {
+                    business.courses.push({ course: courseId, totalLicenses: quantity });
+                }
 
-        //         await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
-        //     }
+                await CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: quantity } });
+            }
 
-        //     await business.save();
-        //     await updateRevenueForCourses(licenseQuantities);
-        // } else {
-        //     const courseIds = Object.keys(licenseQuantities)
-        //         .filter((id) => mongoose.Types.ObjectId.isValid(id))
-        //         .map((id) => new mongoose.Types.ObjectId(id));
+            await business.save();
+            await updateRevenueForCourses(licenseQuantities);
+        } else {
+            const courseIds = Object.keys(licenseQuantities)
+                .filter((id) => mongoose.Types.ObjectId.isValid(id))
+                .map((id) => new mongoose.Types.ObjectId(id));
 
-        //     const newCourseIds = courseIds.filter(
-        //         (id) => !user.purchasedCourses.some((existingId: any) => existingId.toString() === id.toString())
-        //     );
+            const newCourseIds = courseIds.filter(
+                (id) => !user.purchasedCourses.some((existingId: any) => existingId.toString() === id.toString())
+            );
 
-        //     if (newCourseIds.length > 0) {
-        //         user.purchasedCourses.push(...newCourseIds);
-        //         await user.save();
-        //     }
+            if (newCourseIds.length > 0) {
+                user.purchasedCourses.push(...newCourseIds);
+                await user.save();
+            }
 
-        //     await Promise.all(
-        //         courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
-        //     );
+            await Promise.all(
+                courseIds.map((courseId) => CourseModel.findByIdAndUpdate(courseId, { $inc: { purchased: 1 } }))
+            );
 
-        //     await updateRevenueForCourses(licenseQuantities);
-        // }
+            await updateRevenueForCourses(licenseQuantities);
+        }
 
         res.sendStatus(200);
     } catch (error) {

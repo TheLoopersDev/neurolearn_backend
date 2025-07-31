@@ -8,10 +8,13 @@ import {
     handleRequestActionBusiness,
     createInstructorVerificationRequest,
     handleRequestActionInstructor
-} from '../controllers/request.controller';
-import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
-import { updateAccessToken } from '../controllers/user.controller';
+} from '@/controllers/request.controller';
+
+import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
+import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { updateAccessToken } from '@/controllers/user.controller';
+import { businessUpload } from '@/middlewares/upload';
+
 
 /**
  * @swagger
@@ -101,6 +104,7 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
+    businessUpload,
     createBusinessVerificationRequest
 );
 
@@ -147,14 +151,14 @@ router.get(
  *         name: type
  *         schema:
  *           type: string
- *           enum: [course_approval, business_verification]
+ *           enum: [course_approval, business_verification, instructor_verification]
  *     responses:
  *       200:
  *         description: List of pending requests
  *       404:
  *         description: No pending requests found
  */
-router.get('/get-request-pending', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
+router.get('/get-request-pending', isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
 
 /**
  * @swagger
