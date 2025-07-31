@@ -10,7 +10,8 @@ import {
     reorderSections,
     publishSection,
     unpublishSection,
-    getSectionDetail
+    getSectionDetail,
+    getCurriculumByCourseId
 } from '../controllers/section.controller';
 
 const router = express.Router();
@@ -156,6 +157,9 @@ router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSe
  *         description: Internal server error
  */
 router.get('/course/:courseId', updateAccessToken, isAuthenticated, getAllSections);
+
+router.get('/review/:courseId', updateAccessToken, isAuthenticated, getCurriculumByCourseId);
+
 
 /**
  * @swagger

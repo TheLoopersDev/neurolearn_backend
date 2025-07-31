@@ -2,10 +2,9 @@ import { catchAsync } from '../utils/catchAsync';
 import { NextFunction, Request, Response } from 'express';
 import { redis } from '../utils/redis';
 import Quiz from '../models/Quiz.model'; // Adjust the import path as needed
-import Course from '../models/Course.model'; // Import Course model
 import ErrorHandler from '../utils/ErrorHandler';
 import mongoose from 'mongoose';
-import { IQuestion } from '@/interfaces/Quiz';
+import { IQuestion } from '../interfaces/Quiz';
 
 // GET /api/quizzes/:quizId - Fetch a quiz by ID
 export const getQuizById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

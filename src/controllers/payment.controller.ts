@@ -8,6 +8,7 @@ import BusinessModel from '../models/Business.model';
 import RevenueModel from '../models/Revenue.model';
 import UserModel from '../models/User.model';
 
+
 dotenv.config();
 
 const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'http://localhost:3000';

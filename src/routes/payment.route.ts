@@ -1,7 +1,7 @@
 import express from 'express';
 import { createPaymentLink } from '../controllers/payment.controller';
-import { updateAccessToken } from '@/controllers/user.controller';
-import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
+import { updateAccessToken } from '../controllers/user.controller';
+import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 
 const router = express.Router();
 

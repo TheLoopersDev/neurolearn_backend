@@ -12,6 +12,36 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
             type: String,
             trim: true
         },
+        taxCode: {
+            type: String,
+            trim: true
+        },
+        email: {
+            type: String,
+            trim: true
+        },
+        address: {
+            type: String,
+            trim: true
+        },
+        businessSector: {
+            type: String,
+            trim: true
+        },
+        logo: {
+            type: String,
+            trim: true
+        },
+        docImages: {
+            type: [String],
+            default: []
+        },
+        representative: {
+            name: { type: String, trim: true },
+            phone: { type: String, trim: true },
+            email: { type: String, trim: true },
+            address: { type: String, trim: true }
+        },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',

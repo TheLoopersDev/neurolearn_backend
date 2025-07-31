@@ -1,16 +1,20 @@
-import { RequestT } from '@/interfaces/Request';
+import { Request } from '../interfaces/Request';
 import mongoose, { Schema } from 'mongoose';
 
-export const RequestSchema: Schema<RequestT> = new Schema(
+export const RequestSchema: Schema<Request> = new Schema(
     {
         type: {
             type: String,
-            enum: ['course_approval', 'instructor_registration', 'business_verification'],
+            enum: ['course_approval', 'business_verification', 'instructor_verification'],
             required: true
         },
-        courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', default: null },
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-        status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
+        courseId: { type: Schema.Types.String, ref: 'Course', default: null },
+        userId: { type: Schema.Types.String, ref: 'User', required: true },
+        status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+        data: {
+            type: Schema.Types.Mixed,
+            required: false
+        }
     },
     {
         timestamps: true,
@@ -29,4 +33,4 @@ export const RequestSchema: Schema<RequestT> = new Schema(
     }
 );
 
-export default mongoose.models.Request || mongoose.model<RequestT>('Request', RequestSchema);
+export default mongoose.models.Request || mongoose.model<Request>('Request', RequestSchema);

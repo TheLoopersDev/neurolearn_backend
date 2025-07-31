@@ -6,6 +6,7 @@ import CourseModel from '../models/Course.model';
 import UserModel from '../models/User.model';
 import sendMail from '../utils/sendMail';
 import BusinessModel from '../models/Business.model';
+import { v2 as cloudinary } from 'cloudinary';
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -107,7 +108,18 @@ export const handleRequestActionCourse = catchAsync(async (req: Request, res: Re
 // Create business approval request
 
 export const createBusinessVerificationRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { businessName, description } = req.body;
+    const {
+        businessName,
+        description,
+        taxCode,
+        email,
+        address,
+        businessSector,
+        representativeName,
+        representativePhone,
+        representativeEmail,
+        representativeAddress
+    } = req.body;
     const createdBy = req.user?._id || req.body.createdBy;
 
     if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
@@ -123,9 +135,57 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
         return next(new ErrorHandler('A business verification request is already pending.', 400));
     }
 
+    // Xử lý file upload lên Cloudinary
+    let logoUrl = '';
+    let docImageUrls: string[] = [];
+    if (req.files) {
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        if (files.logo && files.logo[0]) {
+            const logoFile = files.logo[0];
+            // Upload logo lên Cloudinary
+            logoUrl = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { folder: 'business/logo' },
+                    (error, result) => {
+                        if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                        else resolve(result.secure_url);
+                    }
+                );
+                stream.end(logoFile.buffer);
+            });
+        }
+        if (files.docImages) {
+            for (const file of files.docImages) {
+                const url = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream(
+                        { folder: 'business/docs' },
+                        (error, result) => {
+                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                            else resolve(result.secure_url);
+                        }
+                    );
+                    stream.end(file.buffer);
+                });
+                docImageUrls.push(url as string);
+            }
+        }
+    }
+
     const newBusiness = await BusinessModel.create({
-        businessName: businessName,
+        businessName,
         description,
+        taxCode,
+        email,
+        address,
+        businessSector,
+        logo: logoUrl,
+        docImages: docImageUrls,
+        representative: {
+            name: representativeName,
+            phone: representativePhone,
+            email: representativeEmail,
+            address: representativeAddress
+        },
         createdBy: createdBy,
         isVerified: false
     });
@@ -235,5 +295,132 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
     res.status(200).json({
         success: true,
         message: `Business verification request has been ${request.status} and notification sent.`
+    });
+});
+
+// Create instructor verification request
+export const createInstructorVerificationRequest = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+        const {
+            fullName,
+            email,
+            phoneNumber,
+            dob,
+            address,
+            category,
+            description,
+            experience,
+            role,
+            company,
+            documents // use middleware to upload
+        } = req.body;
+        const createdBy = req.user?._id || req.body.userId;
+
+        if (!createdBy) return next(new ErrorHandler('Unauthorized access', 401));
+        if (!fullName || !email || !phoneNumber || !dob || !address || !category || !description) {
+            return next(new ErrorHandler('Missing required fields', 400));
+        }
+
+        // Check status is pending
+        const existingRequest = await RequestModel.findOne({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending'
+        });
+        if (existingRequest) {
+            return next(new ErrorHandler('A instructor verification request is already pending.', 400));
+        }
+
+        // Xử lý upload docImages lên Cloudinary
+        let docImageUrls: string[] = [];
+        if (req.files && (req.files as any).docImages) {
+            const files = (req.files as { [fieldname: string]: Express.Multer.File[] }).docImages;
+            for (const file of files) {
+                const url = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream(
+                        { folder: 'instructor/docs' },
+                        (error, result) => {
+                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                            else resolve(result.secure_url);
+                        }
+                    );
+                    stream.end(file.buffer);
+                });
+                docImageUrls.push(url as string);
+            }
+        }
+
+        // Create new request
+        const newRequest = await RequestModel.create({
+            userId: createdBy,
+            type: 'instructor_verification',
+            status: 'pending',
+            data: {
+                fullName,
+                email,
+                phoneNumber,
+                dob,
+                address,
+                category,
+                description,
+                experience,
+                role,
+                company,
+                documents: docImageUrls
+            }
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Instructor verification request has been submitted.',
+            data: newRequest
+        });
+    }
+);
+
+export const handleRequestActionInstructor = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { requestId } = req.params;
+    const { action } = req.body;
+
+    if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
+    if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
+
+    const request = await RequestModel.findById(requestId);
+    if (!request) return next(new ErrorHandler('Request not found', 404));
+    if (request.type !== 'instructor_verification') {
+        return next(new ErrorHandler('This is not an instructor verification request', 400));
+    }
+
+    request.status = action === 'approve' ? 'approved' : 'rejected';
+    await request.save();
+
+    // Nếu approve, cập nhật user thành instructor
+    if (action === 'approve') {
+        await UserModel.findByIdAndUpdate(
+            request.userId,
+            { role: 'instructor' }, // hoặc cập nhật trường phù hợp
+            { new: true }
+        );
+    }
+    // Gửi mail cho user (nếu muốn)
+    const user = await UserModel.findById(request.userId);
+    if (user) {
+        await sendMail({
+            email: user.email,
+            subject: action === 'approve' ? 'Instructor Verification Approved' : 'Instructor Verification Rejected',
+            template: action === 'approve' ? 'approved-instructor-mail.ejs' : 'reject-instructor-mail.ejs',
+            data: {
+                user: { name: user.name },
+                rejectionReason:
+                    action === 'reject' ? 'Your instructor verification request did not meet the requirements.' : ''
+            }
+        });
+    }
+    // Xóa request sau khi xử lý
+    await RequestModel.findByIdAndDelete(requestId);
+
+    res.status(200).json({
+        success: true,
+        message: `Instructor verification request has been ${request.status}.`
     });
 });
