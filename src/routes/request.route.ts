@@ -8,10 +8,13 @@ import {
     handleRequestActionBusiness,
     createInstructorVerificationRequest,
     handleRequestActionInstructor
-} from '../controllers/request.controller';
-import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
-import { updateAccessToken } from '../controllers/user.controller';
+} from '@/controllers/request.controller';
+
+import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
+import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { updateAccessToken } from '@/controllers/user.controller';
+import { businessUpload } from '@/middlewares/upload';
+
 
 /**
  * @swagger
@@ -101,6 +104,7 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
+    businessUpload,
     createBusinessVerificationRequest
 );
 
