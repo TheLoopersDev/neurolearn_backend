@@ -118,3 +118,30 @@ export const clearCart = async (req: Request, res: Response, next: NextFunction)
         next(error);
     }
 };
+
+export const updateCartItemQuantity = async (req: Request, res: Response, next: NextFunction) => {
+    const { courseId, quantity } = req.body;
+    const userId = req.user?._id;
+
+    if (!userId) return next(new ErrorHandler('User not authenticated', 401));
+    if (!courseId || typeof quantity !== 'number' || quantity < 1) {
+        return next(new ErrorHandler('Invalid course ID or quantity', 400));
+    }
+
+    try {
+        const cart = await CartModel.findOne({ userId });
+
+        if (!cart) return next(new ErrorHandler('Cart not found', 404));
+
+        const item = cart.items.find((item: any) => item.courseId.toString() === courseId.toString());
+
+        if (!item) return next(new ErrorHandler('Item not found in cart', 404));
+
+        item.quantity = quantity;
+        await cart.save();
+
+        res.status(200).json({ success: true, message: 'Cart item quantity updated successfully' });
+    } catch (error) {
+        next(error);
+    }
+};

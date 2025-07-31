@@ -233,53 +233,20 @@ export const logoutUser = catchAsync(async (req: Request, res: Response, next: N
     res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 
-// export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-//     const refresh_token = req.cookies.refresh_token as string;
-//     console.log(refresh_token);
-//     const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
-
-//     const message = 'Could not refresh token';
-
-//     if (!decoded) {
-//         return next(new ErrorHandler(message, 400));
-//     }
-
-//     const session = await redis.get(decoded.id as string);
-
-//     if (!session) {
-//         return next(new ErrorHandler(message, 400));
-//     }
-
-//     const user = JSON.parse(session);
-
-//     const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, { expiresIn: '1h' });
-//     const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, { expiresIn: '3d' });
-
-//     req.user = user;
-//     req.access_token = accessToken;
-
-//     res.cookie('access_token', accessToken, accessTokenOptions);
-//     res.cookie('refresh_token', refreshToken, refreshTokenOptions);
-
-//     next();
-// });
-
-//phiên bản cũ ở trên
 export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // Nếu yêu cầu đã có header Authorization, đây là yêu cầu từ di động.
-        // Bỏ qua middleware này và để cho isAuthenticated xử lý.
         if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
             return next();
         }
 
-        // --- Logic ban đầu cho web (giữ nguyên) ---
         const refresh_token = req.cookies.refresh_token as string;
+
         if (!refresh_token) {
-            return next(new ErrorHandler('Please login to access this resource', 400));
+            return next();
         }
 
         const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
+
         if (!decoded.id) {
             return next(new ErrorHandler('Could not refresh token', 400));
         }
@@ -291,13 +258,24 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
 
         const user = JSON.parse(session);
 
-        // Tạo access và refresh token mới
-        sendToken(user, 200, res);
+        const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, {
+            expiresIn: '1h'
+        });
+
+        const newRefreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, {
+            expiresIn: '3d'
+        });
 
         req.user = user;
+
+        res.cookie('access_token', accessToken, accessTokenOptions);
+        res.cookie('refresh_token', newRefreshToken, refreshTokenOptions);
+
+        (req as any).access_token = accessToken;
+
         next();
-    } catch (error: any) {
-        return next(new ErrorHandler(error.message, 400));
+    } catch (error) {
+        return next();
     }
 });
 // export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

@@ -78,7 +78,7 @@ router.post(
     '/:businessId/add-employee',
     updateAccessToken,
     isAuthenticated,
-    authorizeBusinessRoles('admin'),
+    authorizeBusinessRoles('admin', 'manager'),
     addEmployeeByEmail
 );
 
@@ -139,7 +139,7 @@ router.post(
     '/:businessId/employees/import',
     updateAccessToken,
     isAuthenticated,
-    authorizeBusinessRoles('admin'),
+    authorizeBusinessRoles('admin', 'manager'),
     upload.single('file'),
     importEmployeesFromExcel
 );
@@ -382,20 +382,29 @@ router.put(
  *                         properties:
  *                           _id:
  *                             type: string
+ *                             example: "60c72b2f5f1b2c001cfbfa12"
  *                           name:
  *                             type: string
+ *                             example: "John Doe"
  *                           email:
  *                             type: string
+ *                             example: "john@example.com"
  *                           avatar:
  *                             type: string
+ *                             example: "https://example.com/avatar.jpg"
  *                       role:
  *                         type: string
- *                         example: employee
+ *                         example: "employee"
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-07-19T14:23:45.000Z"
  *       403:
  *         description: Forbidden - user has no access
  *       404:
  *         description: Business not found
  */
+
 router.get(
     '/:businessId/visible-employees',
     updateAccessToken,

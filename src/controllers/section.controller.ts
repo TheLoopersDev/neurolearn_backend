@@ -100,6 +100,47 @@ export const getAllSections = catchAsync(async (req: Request, res: Response, nex
     });
 });
 
+export const getCurriculumByCourseId = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.courseId;
+
+    if (!courseId) {
+        return next(new ErrorHandler('Course ID is required', 400));
+    }
+
+    // Lấy tất cả sections thuộc course, đã publish, có sắp xếp
+    const sections = await SectionModel.find({
+        courseId
+    })
+        .sort({ order: 1 })
+        .populate({
+            path: 'lessons',
+            match: { isPublished: true },
+            options: { sort: { order: 1 } }
+        })
+        .lean();
+
+    // Chuyển về format curriculum chuẩn FE cần
+    const curriculum = sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        lessons: Array.isArray(section.lessons)
+            ? section.lessons.map((lesson: any) => ({
+                  id: lesson._id,
+                  type: lesson.type,
+                  title: lesson.title,
+                  url: lesson.videoUrl.url || lesson.documentUrl || '',
+                  thumbnail: lesson.thumbnail || ''
+              }))
+            : []
+    }));
+
+    return res.status(200).json({
+        success: true,
+        curriculum
+    });
+});
+
+
 export const getSectionsByUserId = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.params.userId;
     if (!userId) {

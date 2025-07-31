@@ -182,12 +182,16 @@ export const newPayment = catchAsync(async (req: Request, res: Response, next: N
 // get all orders of a specific user with Redis caching
 export const getUserOrders = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.user?._id;
+    const { userType } = req.body;
 
-    let orders = await OrderModel.find({ userId })
-        .populate({
-            path: 'courseIds'
-        })
-        .sort({ createdAt: -1 });
+    if (!userId || !userType) {
+        return res.status(400).json({
+            success: false,
+            message: 'Missing userId or userType'
+        });
+    }
+
+    const orders = await OrderModel.find({ userId, userType }).populate({ path: 'courseIds' }).sort({ createdAt: -1 });
 
     res.status(200).json({
         success: true,

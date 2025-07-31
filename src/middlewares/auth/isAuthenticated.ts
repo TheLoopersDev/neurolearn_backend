@@ -3,47 +3,32 @@ import { catchAsync } from '../../utils/catchAsync';
 import ErrorHandler from '../../utils/ErrorHandler';
 import { NextFunction, Request, Response } from 'express';
 import { redis } from '../../utils/redis';
-import { Types } from 'mongoose';
 
 export const isAuthenticated = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    let access_token = '';
+    const authHeader = req.headers.authorization;
+    let token;
 
-    // 1. Ưu tiên kiểm tra header Authorization (cho di động)
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        access_token = req.headers.authorization.split(' ')[1];
-    }
-    // 2. Nếu không có, kiểm tra cookie (cho web)
-    else if (req.cookies.access_token) {
-        access_token = req.cookies.access_token as string;
+    if (authHeader && authHeader.startsWith('Bearer ') && authHeader !== 'Bearer session-based') {
+        token = authHeader.split(' ')[1];
+    } else {
+        token = req.cookies.access_token || req.headers['access_token'] || (req as any).access_token;
     }
 
-    if (!access_token) {
-        return next(new ErrorHandler('Please login to access this resource.', 400));
+    if (!token) {
+        return next(new ErrorHandler('You are not logged in. Please log in to access this resource.', 401));
     }
 
     try {
-        const decoded = jwt.verify(access_token, process.env.ACCESS_TOKEN as string) as JwtPayload;
-
-        if (!decoded || !decoded.id) {
-            return next(new ErrorHandler('Access token is not valid', 400));
+        const decoded = jwt.verify(token, process.env.ACCESS_TOKEN as string) as JwtPayload;
+        const session = await redis.get(decoded.id);
+        if (!session) {
+            return next(new ErrorHandler('Session expired. Please login again.', 401));
         }
 
-        const userId = decoded.id.toString();
-
-        if (!Types.ObjectId.isValid(userId)) {
-            return next(new ErrorHandler('Invalid user ID in token', 400));
-        }
-
-        const user = await redis.get(userId);
-
-        if (!user) {
-            return next(new ErrorHandler('User not found in Redis', 400));
-        }
-
-        req.user = JSON.parse(user);
+        req.user = JSON.parse(session);
         next();
-    } catch (error) {
-        console.error('Authentication error:', error);
-        return next(new ErrorHandler('Authentication failed', 401));
+    } catch (err: any) {
+        console.error('JWT error:', err.message);
+        return next(new ErrorHandler('Invalid or expired token', 400));
     }
 });
