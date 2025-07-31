@@ -1,12 +1,10 @@
 import { Request, Response } from 'express';
 import { payos, verifyWebhookSignature } from '../utils/payos';
 import Order from '../models/Order.model';
-import User from '../models/User.model';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import CourseModel from '../models/Course.model';
-import BusinessModel from '../models/Business.model';
-import RevenueModel from '@/models/Revenue.model';
+import RevenueModel from '../models/Revenue.model';
 
 dotenv.config();
 
