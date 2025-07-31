@@ -147,14 +147,14 @@ router.get(
  *         name: type
  *         schema:
  *           type: string
- *           enum: [course_approval, business_verification]
+ *           enum: [course_approval, business_verification, instructor_verification]
  *     responses:
  *       200:
  *         description: List of pending requests
  *       404:
  *         description: No pending requests found
  */
-router.get('/get-request-pending', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
+router.get('/get-request-pending', isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
 
 /**
  * @swagger

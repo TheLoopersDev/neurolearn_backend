@@ -69,6 +69,43 @@ router.get('/', isAuthenticated, withdrawController.getWithdraws);
 
 /**
  * @swagger
+ * /api/withdraw/my-requests:
+ *   get:
+ *     summary: Lấy danh sách yêu cầu rút tiền của instructor (chỉ instructor)
+ *     tags: [Withdraw]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Trang hiện tại
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Số lượng item trên mỗi trang
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, approved, rejected]
+ *         description: Lọc theo trạng thái
+ *     responses:
+ *       200:
+ *         description: Danh sách yêu cầu rút tiền của instructor
+ *       401:
+ *         description: Chưa xác thực
+ *       403:
+ *         description: Chỉ instructor mới được truy cập
+ */
+router.get('/my-requests', isAuthenticated, authorizeRoles('instructor'), withdrawController.getMyWithdrawRequests);
+
+/**
+ * @swagger
  * /api/withdraw/{id}:
  *   get:
  *     summary: Lấy chi tiết yêu cầu rút tiền

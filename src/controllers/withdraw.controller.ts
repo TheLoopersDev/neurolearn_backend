@@ -66,4 +66,44 @@ export const updateWithdrawStatus = catchAsync(async (req: Request, res: Respons
     await revenueService.decreaseRevenue(withdraw.user.toString(), withdraw.amount);
   }
   res.json({ success: true, data: withdraw });
+});
+
+// API cho instructor xem request withdraw của chính mình
+export const getMyWithdrawRequests = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  // Debug log
+  console.log('DEBUG getMyWithdrawRequests req.user:', req.user);
+  // Chỉ instructor mới được truy cập
+  if (req.user.role !== 'instructor') {
+    return next(new ErrorHandler('Only instructors can access this endpoint', 403));
+  }
+
+  const { page = 1, limit = 10, status } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+  
+  // Filter theo user hiện tại và status nếu có
+  const filter: any = { user: req.user._id.toString() };
+  if (status) {
+    filter.status = status;
+  }
+
+  const withdraws = await Withdraw.find(filter)
+    .populate('user', 'name email')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit));
+
+  const total = await Withdraw.countDocuments(filter);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      withdraws,
+      pagination: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(total / Number(limit)),
+        totalItems: total,
+        itemsPerPage: Number(limit)
+      }
+    }
+  });
 }); 
