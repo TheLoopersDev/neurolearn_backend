@@ -1,4 +1,4 @@
-import { Request } from '@/interfaces/Request';
+import { Request } from '../interfaces/Request';
 import mongoose, { Schema } from 'mongoose';
 
 export const RequestSchema: Schema<Request> = new Schema(

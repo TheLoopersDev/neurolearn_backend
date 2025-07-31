@@ -33,7 +33,8 @@ import {
     getAllPurchasedCoursesOfUser,
     getCoursesWithSort,
     getSingleCourseFullDetail,
-    getCourseById
+    getCourseById,
+    getReviewCourseById
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -306,6 +307,8 @@ router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCou
  *         description: Course not found
  */
 router.get('/uploaded/:id', isAuthenticated, updateAccessToken, getUploadedCourseByInstructor);
+
+router.get('/review/:id', isAuthenticated, updateAccessToken, getReviewCourseById);
 
 /**
  * @swagger

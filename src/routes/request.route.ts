@@ -9,10 +9,9 @@ import {
     createInstructorVerificationRequest,
     handleRequestActionInstructor
 } from '../controllers/request.controller';
-import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
-import { updateAccessToken } from '@/controllers/user.controller';
-import { upload } from '../middlewares/upload';
+import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
+import { updateAccessToken } from '../controllers/user.controller';
 
 /**
  * @swagger
