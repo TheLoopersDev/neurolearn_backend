@@ -10,7 +10,8 @@ import { v2 as cloudinary } from 'cloudinary';
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { courseId, userId, message } = req.body;
+  const userId = req.user._id; 
+  const { courseId, message } = req.body;
 
     if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
     if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
