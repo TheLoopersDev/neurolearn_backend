@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import { payos, verifyWebhookSignature } from '../utils/payos';
 import Order from '../models/Order.model';
-import User from '../models/User.model';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import CourseModel from '../models/Course.model';
 import BusinessModel from '../models/Business.model';
-import RevenueModel from '@/models/Revenue.model';
+import RevenueModel from '../models/Revenue.model';
+import UserModel from '../models/User.model';
 
 dotenv.config();
 
@@ -82,7 +82,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        const user = await User.findById(order.userId);
+        const user = await UserModel.findById(order.userId);
         if (!user) {
             console.warn('❌ Không tìm thấy người dùng:', order.userId);
             res.status(404).send('User not found');
