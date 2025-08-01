@@ -10,7 +10,6 @@ export interface BusinessT extends Document {
 
     businessName: string;
     description?: string;
-
     taxCode?: string;
     email?: string;
     address?: string;
@@ -32,6 +31,8 @@ export interface BusinessT extends Document {
     }[];
 
     courses: BusinessCourse[];
+
+    discounts?: Types.ObjectId[];
 
     isVerified: boolean;
 

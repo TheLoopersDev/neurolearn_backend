@@ -28,8 +28,9 @@ const OrderSchema = new Schema<IOrder>(
         payment_info: {
             type: String
         },
-        price: Number,
-        orderCode: String
+        price: { type: Number, required: true },
+        discountCode: { type: String, default: null },
+        orderCode: { type: Number, required: true, unique: true }
     },
     { timestamps: true }
 );
