@@ -8,34 +8,13 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
             required: [true, 'Please provide business name'],
             trim: true
         },
-        description: {
-            type: String,
-            trim: true
-        },
-        taxCode: {
-            type: String,
-            trim: true
-        },
-        email: {
-            type: String,
-            trim: true
-        },
-        address: {
-            type: String,
-            trim: true
-        },
-        businessSector: {
-            type: String,
-            trim: true
-        },
-        logo: {
-            type: String,
-            trim: true
-        },
-        docImages: {
-            type: [String],
-            default: []
-        },
+        description: { type: String, trim: true },
+        taxCode: { type: String, trim: true },
+        email: { type: String, trim: true },
+        address: { type: String, trim: true },
+        businessSector: { type: String, trim: true },
+        logo: { type: String, trim: true },
+        docImages: { type: [String], default: [] },
         representative: {
             name: { type: String, trim: true },
             phone: { type: String, trim: true },
@@ -60,10 +39,7 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
                         enum: ['admin', 'manager', 'employee'],
                         required: true
                     },
-                    createdAt: {
-                        type: Date,
-                        default: Date.now
-                    }
+                    createdAt: { type: Date, default: Date.now }
                 }
             ],
             default: []
@@ -76,19 +52,19 @@ const BusinessSchema: Schema<BusinessT> = new Schema(
                         ref: 'Course',
                         required: true
                     },
-                    totalLicenses: {
-                        type: Number,
-                        required: true,
-                        default: 0
-                    }
+                    totalLicenses: { type: Number, required: true, default: 0 }
                 }
             ],
             default: []
         },
-        isVerified: {
-            type: Boolean,
-            default: false
-        }
+        discounts: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Discount'
+            }
+        ],
+
+        isVerified: { type: Boolean, default: false }
     },
     {
         timestamps: true,

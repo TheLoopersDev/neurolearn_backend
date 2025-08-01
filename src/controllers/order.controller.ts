@@ -30,13 +30,13 @@ export const createOrder = catchAsync(async (req: Request, res: Response, next: 
     }
 
     // Validate payment
-    if (payment_info && 'id' in payment_info) {
-        const paymentIntentId = payment_info.id;
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-        if (paymentIntent.status !== 'succeeded') {
-            return next(new ErrorHandler('Payment not authorized', 400));
-        }
-    }
+    // if (payment_info && 'id' in payment_info) {
+    //     const paymentIntentId = payment_info.id;
+    //     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    //     if (paymentIntent.status !== 'succeeded') {
+    //         return next(new ErrorHandler('Payment not authorized', 400));
+    //     }
+    // }
 
     // Find user
     const user = await UserModel.findById(req.user?._id);

@@ -1,14 +1,14 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface IOrder extends Document {
-    courseIds: [mongoose.Schema.Types.ObjectId];
-    userId: mongoose.Schema.Types.ObjectId;
+    courseIds: mongoose.Types.ObjectId[];
+    userId: mongoose.Types.ObjectId;
     userType: 'user' | 'business';
-    licenseQuantities?: {
-        courseId: mongoose.Schema.Types.ObjectId;
-        quantity: number;
-    }[];
-    payment_info: object;
+    licenseQuantities?: Record<string, number>;
+    payment_info?: string;
     price: number;
-    orderCode: string;
+    discountCode?: string | null;
+    orderCode: number;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
