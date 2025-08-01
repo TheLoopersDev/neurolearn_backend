@@ -7,7 +7,11 @@ import {
     createBusinessVerificationRequest,
     handleRequestActionBusiness,
     createInstructorVerificationRequest,
-    handleRequestActionInstructor
+    handleRequestActionInstructor,
+    cleanupProcessedRequests,
+    forceCleanupAllRequests,
+    forceCleanupDeletedRequests,
+    getRequestStatistics
 } from '../controllers/request.controller';
 import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
@@ -358,6 +362,94 @@ router.put(
     isAuthenticated,
     authorizeRoles('admin'),
     handleRequestActionInstructor
+);
+
+/**
+ * @swagger
+ * /api/request/cleanup-processed:
+ *   delete:
+ *     summary: Cleanup processed requests older than 24 hours (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cleanup completed
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete(
+    '/cleanup-processed',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    cleanupProcessedRequests
+);
+
+/**
+ * @swagger
+ * /api/request/force-cleanup:
+ *   delete:
+ *     summary: Force cleanup all approved/rejected/processed requests (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Force cleanup completed
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete(
+    '/force-cleanup',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    forceCleanupAllRequests
+);
+
+/**
+ * @swagger
+ * /api/request/force-cleanup-deleted:
+ *   delete:
+ *     summary: Force cleanup all deleted requests immediately (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Force cleanup deleted requests completed
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete(
+    '/force-cleanup-deleted',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    forceCleanupDeletedRequests
+);
+
+/**
+ * @swagger
+ * /api/request/statistics:
+ *   get:
+ *     summary: Get request statistics (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Request statistics
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+    '/statistics',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    getRequestStatistics
 );
 
 export = router;

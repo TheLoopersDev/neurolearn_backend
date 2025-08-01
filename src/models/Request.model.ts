@@ -10,7 +10,9 @@ export const RequestSchema: Schema<Request> = new Schema(
         },
         courseId: { type: Schema.Types.String, ref: 'Course', default: null },
         userId: { type: Schema.Types.String, ref: 'User', required: true },
-        status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+        status: { type: String, enum: ['pending', 'approved', 'rejected', 'processed', 'deleted'], default: 'pending' },
+        processedAt: { type: Date, default: null },
+        deletedAt: { type: Date, default: null },
         data: {
             type: Schema.Types.Mixed,
             required: false
