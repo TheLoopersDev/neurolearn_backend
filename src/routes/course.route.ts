@@ -34,7 +34,11 @@ import {
     getCoursesWithSort,
     getSingleCourseFullDetail,
     getCourseById,
-    getReviewCourseById
+    getReviewCourseById,
+    getInstructorReviewStats,
+    getStudentStats,
+    getInstructorCourseStats,
+    getLatestCourseStatus
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -959,5 +963,31 @@ router.put('/unpublish-section/:id', isAuthenticated, updateAccessToken, unpubli
  *         description: Not authenticated
  */
 router.put('/delete-section/:id', isAuthenticated, updateAccessToken, deleteSection);
+
+router.get(
+    '/course/:id/reviews',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor'),
+    getInstructorReviewStats
+);
+
+router.get('/course/:id/stats', updateAccessToken, isAuthenticated, authorizeRoles('instructor'), getStudentStats);
+
+router.get(
+    '/course/:id/course-stats',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor'),
+    getInstructorCourseStats
+);
+
+router.get(
+    '/course/:id/latest-course',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor'),
+    getLatestCourseStatus
+);
 
 export = router;

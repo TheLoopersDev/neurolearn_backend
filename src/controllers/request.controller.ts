@@ -11,10 +11,7 @@ import { v2 as cloudinary } from 'cloudinary';
 // Utility function to find request with fallback methods
 const findRequestWithFallback = async (requestId: string) => {
     const mongoose = require('mongoose');
-    
-    console.log('=== findRequestWithFallback START ===');
-    console.log('Looking for request ID:', requestId);
-    
+
     // Check if requestId is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(requestId)) {
         console.log('Invalid ObjectId format');
@@ -23,13 +20,12 @@ const findRequestWithFallback = async (requestId: string) => {
 
     // Try to find the request using different methods
     let request = await RequestModel.findById(requestId);
-    console.log('findById result:', request ? 'Found' : 'Not found');
-    
+
     if (!request) {
         request = await RequestModel.findOne({ _id: requestId });
         console.log('findOne with _id result:', request ? 'Found' : 'Not found');
     }
-    
+
     if (!request) {
         const ObjectId = mongoose.Types.ObjectId;
         request = await RequestModel.findById(new ObjectId(requestId));
@@ -47,9 +43,7 @@ const findRequestWithFallback = async (requestId: string) => {
         const db = mongoose.connection.db;
         const requestsCollection = db.collection('requests');
         const allDirectRequests = await requestsCollection.find({}).toArray();
-        
-        console.log('Direct query found', allDirectRequests.length, 'requests');
-        
+
         if (allDirectRequests.length > 0) {
             const directDoc = allDirectRequests[0];
             request = new RequestModel(directDoc);
@@ -64,8 +58,9 @@ const findRequestWithFallback = async (requestId: string) => {
 };
 
 // Create course approval request
-export const createCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { courseId, userId, message } = req.body;
+export const createCourseApprovalRequest = catchAsync(async (req, res, next) => {
+    const userId = req.user._id;
+    const { courseId, message } = req.body;
 
     if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
     if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
@@ -73,11 +68,23 @@ export const createCourseApprovalRequest = catchAsync(async (req: Request, res: 
     const existingRequest = await RequestModel.findOne({
         courseId,
         userId,
-        type: 'course_approval',
-        status: 'pending'
+        type: 'course_approval'
     });
-    if (existingRequest) return next(new ErrorHandler('A course approval request is already pending.', 400));
 
+    if (existingRequest) {
+        // Nếu đang pending -> chỉ update message
+        existingRequest.status = 'pending';
+        if (message) existingRequest.message = message;
+        await existingRequest.save();
+
+        return res.status(200).json({
+            success: true,
+            data: existingRequest,
+            message: 'Existing course approval request updated to pending'
+        });
+    }
+
+    // Nếu chưa có -> tạo mới
     const newRequest = await RequestModel.create({
         courseId,
         userId,
@@ -114,9 +121,7 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
     };
     if (type) filter.type = type;
 
-    const requests = await RequestModel.find(filter)
-        .populate('courseId')
-        .populate('userId')
+    const requests = await RequestModel.find(filter).populate('courseId').populate('userId');
 
     if (!requests.length) return next(new ErrorHandler('No pending requests found', 404));
 
@@ -148,7 +153,7 @@ export const handleRequestActionCourse = catchAsync(async (req: Request, res: Re
     if (request.type === 'course_approval') {
         const course = await CourseModel.findById(request.courseId);
         const instructor = await UserModel.findById(request.userId);
-        
+
         if (!course || !instructor) return next(new ErrorHandler('Course or Instructor not found', 404));
 
         console.log('Found course:', course._id, course.name);
@@ -448,26 +453,20 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
             const logoFile = files.logo[0];
             // Upload logo lên Cloudinary
             logoUrl = await new Promise((resolve, reject) => {
-                const stream = cloudinary.uploader.upload_stream(
-                    { folder: 'business/logo' },
-                    (error, result) => {
-                        if (error || !result) reject(error || new Error('No result from Cloudinary'));
-                        else resolve(result.secure_url);
-                    }
-                );
+                const stream = cloudinary.uploader.upload_stream({ folder: 'business/logo' }, (error, result) => {
+                    if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                    else resolve(result.secure_url);
+                });
                 stream.end(logoFile.buffer);
             });
         }
         if (files.docImages) {
             for (const file of files.docImages) {
                 const url = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { folder: 'business/docs' },
-                        (error, result) => {
-                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
-                            else resolve(result.secure_url);
-                        }
-                    );
+                    const stream = cloudinary.uploader.upload_stream({ folder: 'business/docs' }, (error, result) => {
+                        if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                        else resolve(result.secure_url);
+                    });
                     stream.end(file.buffer);
                 });
                 docImageUrls.push(url as string);
@@ -684,13 +683,10 @@ export const createInstructorVerificationRequest = catchAsync(
             const files = (req.files as { [fieldname: string]: Express.Multer.File[] }).docImages;
             for (const file of files) {
                 const url = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { folder: 'instructor/docs' },
-                        (error, result) => {
-                            if (error || !result) reject(error || new Error('No result from Cloudinary'));
-                            else resolve(result.secure_url);
-                        }
-                    );
+                    const stream = cloudinary.uploader.upload_stream({ folder: 'instructor/docs' }, (error, result) => {
+                        if (error || !result) reject(error || new Error('No result from Cloudinary'));
+                        else resolve(result.secure_url);
+                    });
                     stream.end(file.buffer);
                 });
                 docImageUrls.push(url as string);
@@ -734,7 +730,7 @@ export const handleRequestActionInstructor = catchAsync(async (req: Request, res
 
     const request = await findRequestWithFallback(requestId);
     if (!request) return next(new ErrorHandler('Request not found', 404));
-    
+
     if (request.type !== 'instructor_verification') {
         return next(new ErrorHandler('This is not an instructor verification request', 400));
     }
@@ -813,5 +809,59 @@ export const handleRequestActionInstructor = catchAsync(async (req: Request, res
     res.status(200).json({
         success: true,
         message: `Instructor verification request has been ${request.status}.`
+    });
+});
+
+export const getAllInstructorCourseRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.user?._id; // lấy từ middleware isAuthenticated
+
+    if (!userId) {
+        return next(new ErrorHandler('Unauthorized access', 401));
+    }
+
+    // Lọc tất cả request của instructor hiện tại
+    const requests = await RequestModel.find({
+        userId,
+        type: 'course_approval' // chỉ lấy request duyệt course
+    })
+        .populate('courseId') // lấy thông tin course
+        .sort({ createdAt: -1 }); // mới nhất trước
+
+    res.status(200).json({
+        success: true,
+        total: requests.length,
+        data: requests
+    });
+});
+
+export const updateCourseApprovalRequest = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.user._id;
+    const { requestId, courseId, message, status } = req.body;
+
+    if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
+    if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
+
+    // Tìm request
+    const query: any = { courseId, userId, type: 'course_approval' };
+    if (requestId) query._id = requestId; // nếu có requestId, check chính xác
+
+    const existingRequest = await RequestModel.findOne(query);
+
+    if (!existingRequest) {
+        return next(new ErrorHandler('No course approval request found to update.', 404));
+    }
+
+    // Cập nhật trạng thái và message
+    if (status) existingRequest.status = status;
+    else existingRequest.status = 'pending'; // default
+
+    if (message) existingRequest.message = message;
+
+    await existingRequest.save();
+
+    res.status(200).json({
+        success: true,
+        message: `Course approval request updated to ${existingRequest.status}.`,
+        data: existingRequest
     });
 });
