@@ -7,7 +7,9 @@ import {
     createBusinessVerificationRequest,
     handleRequestActionBusiness,
     createInstructorVerificationRequest,
-    handleRequestActionInstructor
+    handleRequestActionInstructor,
+    getAllInstructorCourseRequest,
+    updateCourseApprovalRequest
 } from '@/controllers/request.controller';
 
 import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
@@ -362,5 +364,16 @@ router.put(
     authorizeRoles('admin'),
     handleRequestActionInstructor
 );
+
+router.get(
+    '/instructor/course-requests',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor'),
+    getAllInstructorCourseRequest
+);
+
+router.put('/update-course-approval-request', isAuthenticated, updateAccessToken, updateCourseApprovalRequest);
+
 
 export = router;

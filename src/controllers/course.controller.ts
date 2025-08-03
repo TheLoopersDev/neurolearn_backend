@@ -149,7 +149,7 @@ export const publishCourse = catchAsync(async (req: Request, res: Response, next
         redis.set(courseId, JSON.stringify(course));
     }
 
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: true }, { new: true });
+    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: false }, { new: true });
 
     redis.set(courseId, JSON.stringify(courseAfterUpdated));
 
@@ -171,15 +171,27 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
     let course;
 
     if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
+        course = JSON.parse(isCacheExist);
     } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
+        course = await CourseModel.findById(courseId);
+        if (course) {
+            await redis.set(courseId, JSON.stringify(course));
+        }
     }
 
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: false }, { new: true });
+    // ✅ Update cả isPublished và isDraft
+    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(
+        courseId,
+        {
+            isPublished: false,
+            isDraft: true
+        },
+        { new: true } // trả về bản ghi đã update
+    );
 
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
+    if (courseAfterUpdated) {
+        await redis.set(courseId, JSON.stringify(courseAfterUpdated));
+    }
 
     res.status(200).json({
         success: true,
@@ -1339,7 +1351,7 @@ function generateEmptyYearStats() {
     return monthNames.map((m) => ({ name: m, view: 0, buy: 0 }));
 }
 
-export const getInstructorCourseStats  = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+export const getInstructorCourseStats = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const instructorId = req.params.id;
 
     if (!mongoose.Types.ObjectId.isValid(instructorId)) {
@@ -1448,7 +1460,7 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
                 name: course.name,
                 subTitle: course.subTitle,
                 thumbnail: course.thumbnail ? { url: course.thumbnail.url } : null,
-                author: course.authorId,
+                publisher: course.authorId,
                 category: course.category,
                 rating: course.rating,
                 price: course.price,
