@@ -201,7 +201,7 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 
 // get single course without purchase
 import { ICourseDetail } from '../interfaces/Course'; // interface mới
-import OrderModel from '@/models/Order.model';
+import OrderModel from '../models/Order.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
