@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IDiscount extends Document {
     code: string;
+    name?: string; // Tên giảm giá
     description?: string;
     discountType: 'percentage' | 'fixed'; // Loại giảm giá: % hoặc cố định
     amount: number; // % hoặc số tiền giảm trực tiếp
@@ -22,6 +23,7 @@ export interface IDiscount extends Document {
 const DiscountSchema = new Schema<IDiscount>(
     {
         code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+        name: { type: String },
         description: { type: String },
         discountType: { type: String, enum: ['percentage', 'fixed'], required: true },
         amount: { type: Number, required: true }, // Số % hoặc số tiền giảm
