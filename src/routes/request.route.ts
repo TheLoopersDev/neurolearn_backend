@@ -16,6 +16,7 @@ import {
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 import { updateAccessToken } from '../controllers/user.controller';
+import { businessUpload } from '../middlewares/upload';
 
 /**
  * @swagger
@@ -399,13 +400,7 @@ router.delete(
  *       401:
  *         description: Unauthorized
  */
-router.delete(
-    '/force-cleanup',
-    updateAccessToken,
-    isAuthenticated,
-    authorizeRoles('admin'),
-    forceCleanupAllRequests
-);
+router.delete('/force-cleanup', updateAccessToken, isAuthenticated, authorizeRoles('admin'), forceCleanupAllRequests);
 
 /**
  * @swagger
@@ -443,12 +438,6 @@ router.delete(
  *       401:
  *         description: Unauthorized
  */
-router.get(
-    '/statistics',
-    updateAccessToken,
-    isAuthenticated,
-    authorizeRoles('admin'),
-    getRequestStatistics
-);
+router.get('/statistics', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getRequestStatistics);
 
 export = router;

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createDiscount, getAllDiscounts, validateDiscountCode } from '../controllers/discount.controller';
 import { updateAccessToken } from '../controllers/user.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 
 const router = Router();
 
