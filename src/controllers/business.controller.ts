@@ -601,3 +601,101 @@ export const getUnassignedEmployeesForCourse = catchAsync(async (req: Request, r
         employees: unassignedEmployees
     });
 });
+
+// Get all businesses in database
+export const getAllBusinesses = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { page = 1, limit = 10, search, isVerified } = req.query;
+    
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build filter
+    const filter: any = {};
+    
+    if (search) {
+        filter.$or = [
+            { businessName: { $regex: search, $options: 'i' } },
+            { description: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+            { address: { $regex: search, $options: 'i' } },
+            { businessSector: { $regex: search, $options: 'i' } }
+        ];
+    }
+    
+    if (isVerified !== undefined) {
+        filter.isVerified = isVerified === 'true';
+    }
+
+    // Get total count for pagination
+    const totalBusinesses = await BusinessModel.countDocuments(filter);
+    
+    // Get businesses with pagination and populate
+    const businesses = await BusinessModel.find(filter)
+        .populate('createdBy', 'name email avatar')
+        .populate('employees.user', 'name email avatar')
+        .populate('courses.course', 'name description thumbnail price')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalBusinesses / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+
+    res.status(200).json({
+        success: true,
+        data: businesses,
+        pagination: {
+            currentPage: pageNum,
+            totalPages,
+            totalBusinesses,
+            hasNextPage,
+            hasPrevPage,
+            limit: limitNum
+        }
+    });
+});
+
+// Get business statistics for admin dashboard
+export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const totalBusinesses = await BusinessModel.countDocuments({});
+    const verifiedBusinesses = await BusinessModel.countDocuments({ isVerified: true });
+    const unverifiedBusinesses = await BusinessModel.countDocuments({ isVerified: false });
+    
+    // Get businesses created in last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentBusinesses = await BusinessModel.countDocuments({
+        createdAt: { $gte: thirtyDaysAgo }
+    });
+
+    // Get top business sectors
+    const sectorStats = await BusinessModel.aggregate([
+        {
+            $group: {
+                _id: '$businessSector',
+                count: { $sum: 1 }
+            }
+        },
+        {
+            $sort: { count: -1 }
+        },
+        {
+            $limit: 5
+        }
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            totalBusinesses,
+            verifiedBusinesses,
+            unverifiedBusinesses,
+            recentBusinesses,
+            sectorStats
+        }
+    });
+});

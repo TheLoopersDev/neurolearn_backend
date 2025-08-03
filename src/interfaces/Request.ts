@@ -7,7 +7,9 @@ export interface Request {
     userId: string;
     instructorId?: string | null;
     type: 'course_approval' | 'business_verification' | 'instructor_verification';
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'pending' | 'approved' | 'rejected' | 'processed' | 'deleted';
+    processedAt?: Date;
+    deletedAt?: Date;
     message?: string;
     data?: {
         fullName?: string;
