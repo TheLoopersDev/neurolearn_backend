@@ -10,11 +10,13 @@ import {
     getUnassignedEmployeesForCourse,
     importEmployeesFromExcel,
     removeEmployeeFromBusiness,
-    upgradeEmployeeRole
+    upgradeEmployeeRole,
+    getAllBusinesses,
+    getBusinessStatisticsForAdmin
 } from '../controllers/business.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
-import { authorizeBusinessRoles } from '../middlewares/auth/authorizeRoles';
+import { authorizeBusinessRoles, authorizeRoles } from '../middlewares/auth/authorizeRoles';
 import upload from '../utils/upload';
 
 const router = express.Router();
@@ -718,6 +720,179 @@ router.get(
     isAuthenticated,
     authorizeBusinessRoles('admin', 'manager'),
     getUnassignedEmployeesForCourse
+);
+
+/**
+ * @swagger
+ * /api/business/all:
+ *   get:
+ *     summary: Get all businesses in database (Admin only)
+ *     tags: [Business]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of businesses per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for business name, description, email, address, or sector
+ *       - in: query
+ *         name: isVerified
+ *         schema:
+ *           type: boolean
+ *         description: Filter by verification status
+ *     responses:
+ *       200:
+ *         description: List of businesses retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       businessName:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       address:
+ *                         type: string
+ *                       businessSector:
+ *                         type: string
+ *                       isVerified:
+ *                         type: boolean
+ *                       createdBy:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                       employees:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                       courses:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     currentPage:
+ *                       type: integer
+ *                       example: 1
+ *                     totalPages:
+ *                       type: integer
+ *                       example: 5
+ *                     totalBusinesses:
+ *                       type: integer
+ *                       example: 50
+ *                     hasNextPage:
+ *                       type: boolean
+ *                       example: true
+ *                     hasPrevPage:
+ *                       type: boolean
+ *                       example: false
+ *                     limit:
+ *                       type: integer
+ *                       example: 10
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ */
+router.get(
+    '/all',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    getAllBusinesses
+);
+
+/**
+ * @swagger
+ * /api/business/admin/statistics:
+ *   get:
+ *     summary: Get business statistics for admin dashboard (Admin only)
+ *     tags: [Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Business statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalBusinesses:
+ *                       type: integer
+ *                       example: 150
+ *                     verifiedBusinesses:
+ *                       type: integer
+ *                       example: 120
+ *                     unverifiedBusinesses:
+ *                       type: integer
+ *                       example: 30
+ *                     recentBusinesses:
+ *                       type: integer
+ *                       example: 15
+ *                     sectorStats:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                             example: "Technology"
+ *                           count:
+ *                             type: integer
+ *                             example: 45
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ */
+router.get(
+    '/admin/statistics',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    getBusinessStatisticsForAdmin
 );
 
 export default router;
