@@ -1,7 +1,6 @@
-import { validateAndCalculateDiscount } from '../services/discount.service';
 import DiscountModel from '../models/Discount.model';
 import { Request, Response } from 'express';
-
+import mongoose from 'mongoose';
 // API tạo mã giảm giá
 export const createDiscount = async (req: Request, res: Response) => {
     try {
@@ -78,10 +77,52 @@ export const validateDiscountCode = async (req: Request, res: Response): Promise
     }
 };
 
-// API lấy tất cả mã giảm giá
 export const getAllDiscounts = async (req: Request, res: Response) => {
     try {
         const discounts = await DiscountModel.find().sort({ createdAt: -1 });
+        res.json({ success: true, discounts });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const getAvailableDiscounts = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?._id;
+        const businessId = req.user?.businessInfo?.businessId;
+
+        if (!userId && !businessId) {
+            res.status(400).json({ success: false, message: 'Missing userId or businessId' });
+            return;
+        }
+
+        const conditions: any[] = [];
+
+        // 1. Discount công khai
+        conditions.push({ accessType: 'public' });
+
+        // 2. Discount private nhưng có trong allowedUsers hoặc allowedBusinesses
+        const privateCondition: any = { accessType: 'private', $or: [] };
+
+        if (userId) {
+            privateCondition.$or.push({ allowedUsers: new mongoose.Types.ObjectId(String(userId)) });
+        }
+        if (businessId) {
+            privateCondition.$or.push({ allowedBusinesses: new mongoose.Types.ObjectId(String(businessId)) });
+        }
+
+        if (privateCondition.$or.length > 0) {
+            conditions.push(privateCondition);
+        }
+
+        // Query
+        const discounts = await DiscountModel.find({
+            $or: conditions,
+            isActive: true,
+            startDate: { $lte: new Date() },
+            endDate: { $gte: new Date() }
+        }).sort({ createdAt: -1 });
+
         res.json({ success: true, discounts });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });

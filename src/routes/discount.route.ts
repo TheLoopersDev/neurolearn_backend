@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { createDiscount, getAllDiscounts, validateDiscountCode } from '../controllers/discount.controller';
+import {
+    createDiscount,
+    getAllDiscounts,
+    getAvailableDiscounts,
+    validateDiscountCode
+} from '../controllers/discount.controller';
 import { updateAccessToken } from '../controllers/user.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
@@ -14,5 +19,7 @@ router.post('/validate', updateAccessToken, isAuthenticated, validateDiscountCod
 
 // Xem tất cả mã giảm giá (admin)
 router.get('/', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getAllDiscounts);
+
+router.get('/available', updateAccessToken, isAuthenticated, getAvailableDiscounts);
 
 export default router;
