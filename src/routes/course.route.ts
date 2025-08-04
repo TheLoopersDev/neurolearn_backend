@@ -34,7 +34,8 @@ import {
     getCoursesWithSort,
     getSingleCourseFullDetail,
     getCourseById,
-    getReviewCourseById
+    getReviewCourseById,
+    checkCoursePurchased
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -243,6 +244,8 @@ router.post('/sign-delete', getSignatureForDelete);
  *         description: Course not found
  */
 router.get('/:id', getSingleCourse, getUserInfo);
+
+router.get('/:id/is-purchased', isAuthenticated, updateAccessToken, checkCoursePurchased);
 
 /**
  * @swagger
