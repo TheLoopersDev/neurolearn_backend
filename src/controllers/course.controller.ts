@@ -1779,3 +1779,38 @@ export const getReviewCourseById = catchAsync(async (req: Request, res: Response
         }
     });
 });
+
+export const checkCoursePurchased = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.id;
+
+    if (!courseId) {
+        return next(new ErrorHandler('Course ID is required', 400));
+    }
+
+    if (!req.user?._id) {
+        return next(new ErrorHandler('Not authenticated', 401));
+    }
+
+    // Lấy user mới nhất từ DB
+    const freshUser = await UserModel.findById(req.user._id);
+
+    if (!freshUser) {
+        return next(new ErrorHandler('User not found', 404));
+    }
+
+    // --- Check purchasedCourses ---
+    const purchasedCourses = (freshUser.purchasedCourses || []).map((id: any) => id.toString());
+    const purchasedMatch = purchasedCourses.includes(courseId.toString());
+
+    // --- Check assignedCourses ---
+    const assignedMatch = (freshUser.assignedCourses || []).some(
+        (assigned: any) => assigned.course?.toString() === courseId.toString()
+    );
+
+    const isPurchased = purchasedMatch || assignedMatch;
+
+    return res.status(200).json({
+        success: true,
+        isPurchased
+    });
+});

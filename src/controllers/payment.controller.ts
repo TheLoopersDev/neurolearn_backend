@@ -44,7 +44,7 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
         } as any);
 
         const userType =
-            req.user?.businessInfo?.role === 'admin' || req.user?.businessInfo?.role === 'manager'
+            req.user?.businessInfo?.role === 'admin' 
                 ? 'business'
                 : 'user';
 
