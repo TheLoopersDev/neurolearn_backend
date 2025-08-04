@@ -149,7 +149,7 @@ export const publishCourse = catchAsync(async (req: Request, res: Response, next
         redis.set(courseId, JSON.stringify(course));
     }
 
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: true }, { new: true });
+    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: false }, { new: true });
 
     redis.set(courseId, JSON.stringify(courseAfterUpdated));
 
@@ -171,15 +171,27 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
     let course;
 
     if (isCacheExist) {
-        course = await JSON.parse(isCacheExist);
+        course = JSON.parse(isCacheExist);
     } else {
-        course = await CourseModel.findById(req.params.id);
-        redis.set(courseId, JSON.stringify(course));
+        course = await CourseModel.findById(courseId);
+        if (course) {
+            await redis.set(courseId, JSON.stringify(course));
+        }
     }
 
-    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(courseId, { isPublished: false }, { new: true });
+    // ✅ Update cả isPublished và isDraft
+    const courseAfterUpdated = await CourseModel.findByIdAndUpdate(
+        courseId,
+        {
+            isPublished: false,
+            isDraft: true
+        },
+        { new: true } // trả về bản ghi đã update
+    );
 
-    redis.set(courseId, JSON.stringify(courseAfterUpdated));
+    if (courseAfterUpdated) {
+        await redis.set(courseId, JSON.stringify(courseAfterUpdated));
+    }
 
     res.status(200).json({
         success: true,
@@ -189,6 +201,7 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 
 // get single course without purchase
 import { ICourseDetail } from '../interfaces/Course'; // interface mới
+import OrderModel from '../models/Order.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -1236,87 +1249,184 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
     });
 });
 
-// get courses statistics
-export const getCourseStatistics = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courses = await CourseModel.find({ isPublished: true })
-        .populate('category', 'title')
-        .populate('subCategory', 'title')
-        .populate('authorId', 'name')
-        .populate('level', 'name');
+// get Instructor courses review statistics
+export const getInstructorReviewStats = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const instructorId = req.params.id;
 
-    const formatCategoryData = () => ({
-        title: 'Categories',
-        data: courses.reduce((acc, course) => {
-            const categoryLabel = course.category?.title || 'Unknown';
-            const subCategoryLabel = course.subCategory?.title || 'Unknown';
+    if (!mongoose.Types.ObjectId.isValid(instructorId)) {
+        return next(new ErrorHandler('Invalid instructor ID', 400));
+    }
 
-            let categoryItem = acc.find((item: any) => item.label === categoryLabel);
-            if (!categoryItem) {
-                categoryItem = { label: categoryLabel, count: 0, subCategories: [] };
-                acc.push(categoryItem);
-            }
+    // Lấy tất cả khóa học của instructor kèm reviews
+    const courses = await CourseModel.find({ authorId: instructorId }).select('reviews');
 
-            categoryItem.count += 1;
+    if (!courses || courses.length === 0) {
+        return res.status(200).json({
+            average: 0,
+            total: 0,
+            stats: [5, 4, 3, 2, 1].map((star) => ({ star, percent: 0 }))
+        });
+    }
 
-            const subCategoryItem = categoryItem.subCategories.find((sub: any) => sub.label === subCategoryLabel);
-            if (subCategoryItem) {
-                subCategoryItem.count += 1;
-            } else {
-                categoryItem.subCategories.push({ label: subCategoryLabel, count: 1 });
-            }
+    // Gom tất cả reviews lại
+    const allReviews = courses.flatMap((course) => course.reviews || []);
 
-            return acc;
-        }, [])
+    const total = allReviews.length;
+    if (total === 0) {
+        return res.status(200).json({
+            average: 0,
+            total: 0,
+            stats: [5, 4, 3, 2, 1].map((star) => ({ star, percent: 0 }))
+        });
+    }
+
+    // Đếm số review cho từng sao 1–5
+    const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let sumRating = 0;
+
+    allReviews.forEach((review) => {
+        const rating = review.rating || 0;
+        if (rating >= 1 && rating <= 5) {
+            counts[rating] = (counts[rating] || 0) + 1;
+            sumRating += rating;
+        }
     });
 
-    const formatData = (field: string, title: string) => ({
-        title,
-        data: courses.reduce((acc, course) => {
-            const fieldValue = course[field]?.title || course[field]?.name || course[field] || 'Unknown';
-            const existing = acc.find((item: any) => item.label === fieldValue);
-            if (existing) {
-                existing.count += 1;
-            } else {
-                acc.push({ label: fieldValue, count: 1 });
-            }
-            return acc;
-        }, [])
+    const average = sumRating / total;
+
+    const stats = [5, 4, 3, 2, 1].map((star) => ({
+        star,
+        percent: Math.round((counts[star] / total) * 100)
+    }));
+
+    res.status(200).json({
+        average: Number(average.toFixed(1)),
+        total,
+        stats
+    });
+});
+
+export const getStudentStats = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const instructorId = req.params.id;
+
+    // Lấy danh sách course của instructor
+    const courses = await CourseModel.find({ authorId: instructorId }).select('_id');
+    if (!courses.length) {
+        return res.json({
+            stats: generateEmptyYearStats() // Trả đủ 12 tháng rỗng
+        });
+    }
+
+    const courseIds = courses.map((c) => c._id);
+
+    // Lấy các order liên quan
+    const orders = await OrderModel.find({ courseIds: { $in: courseIds } }).select('createdAt courseIds');
+
+    // Khởi tạo map 12 tháng rỗng
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const statsMap: Record<string, { name: string; view: number; buy: number }> = {};
+    monthNames.forEach((m) => {
+        statsMap[m] = { name: m, view: 0, buy: 0 };
     });
 
-    const formatRatingData = () => ({
-        title: 'Rating',
-        data: [
-            { label: '1', min: 0, max: 1 },
-            { label: '2', min: 1, max: 2 },
-            { label: '3', min: 2, max: 3 },
-            { label: '4', min: 3, max: 4 },
-            { label: '5', min: 4, max: 5 }
-        ].map(({ label, min, max }) => ({
-            label,
-            count: courses.filter((course) => course.rating > min && course.rating <= max).length
-        }))
+    // Cộng dữ liệu vào đúng tháng
+    orders.forEach((order) => {
+        const created = new Date(order.createdAt);
+        const month = created.toLocaleString('en-US', { month: 'short' }); // Jan, Feb ...
+        if (!statsMap[month]) return;
+
+        // Nếu có dữ liệu view log thì cộng vào view (tạm để 0)
+        statsMap[month].buy += order.courseIds.length;
     });
 
-    const formatPriceData = () => ({
-        title: 'Price',
-        data: [
-            { label: 'Free', count: courses.filter((course) => course.price === 0).length },
-            { label: 'Paid', count: courses.filter((course) => course.price > 0).length }
-        ]
-    });
+    // Convert map -> array theo thứ tự tháng
+    const stats = monthNames.map((m) => statsMap[m]);
 
-    const data = {
-        categories: formatCategoryData(),
-        authors: formatData('authorId', 'Author'),
-        levels: formatData('level', 'Level'),
-        ratings: formatRatingData(),
-        price: formatPriceData(),
-        languages: formatData('language', 'Language')
-    };
+    res.json({ stats });
+});
+
+// Helper tạo 12 tháng rỗng
+function generateEmptyYearStats() {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return monthNames.map((m) => ({ name: m, view: 0, buy: 0 }));
+}
+
+export const getInstructorCourseStats = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const instructorId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(instructorId)) {
+        return res.status(400).json({ success: false, message: 'Invalid instructor ID' });
+    }
+
+    try {
+        // 1️⃣ Lấy tất cả courses của instructor
+        const courses = await CourseModel.find({ authorId: instructorId }).select('_id isPublished');
+
+        const totalCourses = courses.length;
+        const pendingCourses = courses.filter((c) => !c.isPublished).length;
+        const publishedCourses = courses.filter((c) => c.isPublished).length;
+
+        // 2️⃣ Đếm số courses sold từ OrderModel
+        // Giả sử Order có cấu trúc { courseIds: ObjectId[], ... }
+        const courseIds = courses.map((c) => c._id);
+
+        const orders = await OrderModel.find({ courseIds: { $in: courseIds } }).select('courseIds');
+        let coursesSold = 0;
+        orders.forEach((order) => {
+            // đếm số lượng courses trong order trùng với instructor
+            const matchedCourses = order.courseIds.filter((cid: any) => courseIds.some((id) => id.equals(cid)));
+            coursesSold += matchedCourses.length;
+        });
+
+        return res.status(200).json({
+            success: true,
+            totalCourses,
+            pendingCourses,
+            publishedCourses,
+            coursesSold
+        });
+    } catch (error) {
+        console.error('Error fetching course stats:', error);
+        return res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+export const getLatestCourseStatus = catchAsync(async (req: Request, res: Response, next) => {
+    const instructorId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(instructorId)) {
+        return next(new ErrorHandler('Invalid instructor ID', 400));
+    }
+
+    // Lấy course mới nhất
+    const latestCourse = await CourseModel.findOne({ authorId: instructorId })
+        .sort({ createdAt: -1 })
+        .select('_id name thumbnail isPublished createdAt sections');
+
+    if (!latestCourse) {
+        return res.status(200).json({
+            success: true,
+            course: null
+        });
+    }
+
+    // Xác định trạng thái
+    const status = latestCourse.isPublished ? 'published' : latestCourse.sections?.length ? 'pending' : 'draft';
+
+    // Tính progress: ví dụ coi tổng số section là 2 bước (title + section)
+    const stepsTotal = 2;
+    const stepsCompleted = status === 'draft' ? 1 : stepsTotal;
 
     res.status(200).json({
         success: true,
-        data
+        course: {
+            _id: latestCourse._id,
+            name: latestCourse.name,
+            thumbnail: latestCourse.thumbnail?.url || '/assets/images/default-course.png',
+            status,
+            stepsCompleted,
+            stepsTotal
+        }
     });
 });
 
@@ -1350,7 +1460,7 @@ export const getTopCourses = catchAsync(async (req: Request, res: Response, next
                 name: course.name,
                 subTitle: course.subTitle,
                 thumbnail: course.thumbnail ? { url: course.thumbnail.url } : null,
-                author: course.authorId,
+                publisher: course.authorId,
                 category: course.category,
                 rating: course.rating,
                 price: course.price,

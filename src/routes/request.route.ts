@@ -8,6 +8,8 @@ import {
     handleRequestActionBusiness,
     createInstructorVerificationRequest,
     handleRequestActionInstructor,
+    getAllInstructorCourseRequest,
+    updateCourseApprovalRequest,
     cleanupProcessedRequests,
     forceCleanupAllRequests,
     forceCleanupDeletedRequests,
@@ -106,7 +108,6 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
-    businessUpload,
     createBusinessVerificationRequest
 );
 
@@ -364,6 +365,17 @@ router.put(
     authorizeRoles('admin'),
     handleRequestActionInstructor
 );
+
+router.get(
+    '/instructor/course-requests',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor'),
+    getAllInstructorCourseRequest
+);
+
+router.put('/update-course-approval-request', isAuthenticated, updateAccessToken, updateCourseApprovalRequest);
+
 
 /**
  * @swagger

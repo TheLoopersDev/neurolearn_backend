@@ -53,3 +53,58 @@ export const getUserIncome = catchAsync(async (req: Request, res: Response, next
         incomeData
     });
 });
+
+export const getUserIncomeChart = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return next(new ErrorHandler('Invalid user ID', 400));
+    }
+
+    // Lấy tất cả orders kèm course chi tiết
+    const orders = await OrderModel.find({}).populate({
+        path: 'courseIds',
+        select: 'authorId price purchased'
+    });
+
+    // Khởi tạo dữ liệu month
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyData = Array(12).fill(0);
+    const yearlyData: Record<string, number> = {};
+
+    // Duyệt toàn bộ order và tính doanh thu
+    orders.forEach((order) => {
+        const orderDate = new Date(order.createdAt);
+        const month = orderDate.getMonth();
+        const year = orderDate.getFullYear().toString();
+
+        order.courseIds.forEach((course: any) => {
+            if (course.authorId.toString() === userId) {
+                const incomeAfterCommission = course.price * course.purchased * 0.9;
+
+                // Thống kê theo tháng
+                monthlyData[month] += incomeAfterCommission;
+
+                // Thống kê theo năm
+                yearlyData[year] = (yearlyData[year] || 0) + incomeAfterCommission;
+            }
+        });
+    });
+
+    // Convert sang format Recharts
+    const monthlyChart = months.map((m, i) => ({
+        name: m,
+        revenue: Math.round(monthlyData[i])
+    }));
+
+    const yearlyChart = Object.entries(yearlyData).map(([year, revenue]) => ({
+        name: year,
+        revenue: Math.round(revenue)
+    }));
+
+    res.status(200).json({
+        success: true,
+        monthlyChart,
+        yearlyChart
+    });
+});
