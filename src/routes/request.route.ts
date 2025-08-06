@@ -108,6 +108,7 @@ router.post(
     updateAccessToken,
     isAuthenticated,
     authorizeRoles('user'),
+    businessUpload,
     createBusinessVerificationRequest
 );
 
