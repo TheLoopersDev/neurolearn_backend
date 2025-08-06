@@ -36,7 +36,7 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
         const paymentLinkRes = await payos.createPaymentLink({
             orderCode,
-            amount, // FE đã gửi giá sau giảm
+            amount,
             description,
             returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
             cancelUrl: `${clientUrl}`,
