@@ -708,3 +708,12 @@ export const getInstructorsWithSort = catchAsync(async (req: Request, res: Respo
         instructors: users
     });
 });
+
+export const getUserPurchasedCoursesMobile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !req.user._id) {
+        return next(new ErrorHandler('User not authenticated', 500));
+    }
+
+    const userId = req.user._id.toString();
+    getUserById(userId, res);
+});
