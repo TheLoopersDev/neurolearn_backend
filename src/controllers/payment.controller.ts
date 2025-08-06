@@ -39,14 +39,10 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             amount,
             description,
             returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
-            cancelUrl: `${clientUrl}`,
-            extraData: JSON.stringify({ userId, courseIds })
+            cancelUrl: `${clientUrl}`
         } as any);
 
-        const userType =
-            req.user?.businessInfo?.role === 'admin' 
-                ? 'business'
-                : 'user';
+        const userType = req.user?.businessInfo?.role === 'admin' ? 'business' : 'user';
 
         await Order.create({
             userId,
