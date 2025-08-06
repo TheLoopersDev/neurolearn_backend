@@ -32,17 +32,21 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             return;
         }
 
+        const userType = req.user?.businessInfo?.role === 'admin' ? 'business' : 'user';
         const orderCode = Math.floor(Math.random() * 1_000_000);
+
+        const returnUrl =
+            userType === 'business'
+                ? `${clientUrl}/business/dashboard/purchase-history/${orderCode}`
+                : `${clientUrl}/dashboard/purchase-history/${orderCode}`;
 
         const paymentLinkRes = await payos.createPaymentLink({
             orderCode,
             amount,
             description,
-            returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
+            returnUrl,
             cancelUrl: `${clientUrl}`
         } as any);
-
-        const userType = req.user?.businessInfo?.role === 'admin' ? 'business' : 'user';
 
         await Order.create({
             userId,
