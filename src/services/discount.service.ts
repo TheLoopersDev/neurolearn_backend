@@ -15,6 +15,10 @@ export const validateAndCalculateDiscount = async ({
     userId,
     userBusinessId
 }: ValidateDiscountParams) => {
+    // Handle empty string values for ObjectId fields
+    const cleanUserBusinessId = userBusinessId && userBusinessId.trim() !== '' ? userBusinessId : undefined;
+    const cleanCourseIds = courseIds?.filter(id => id && id.trim() !== '') || [];
+    
     const discount = await DiscountModel.findOne({ code: code.toUpperCase() });
 
     if (!discount) throw new Error('Mã giảm giá không tồn tại');
@@ -32,7 +36,7 @@ export const validateAndCalculateDiscount = async ({
     // 3. Kiểm tra public/private
     if (discount.accessType === 'private') {
         const isUserAllowed = discount.allowedUsers?.some((u) => u.toString() === userId?.toString());
-        const isBusinessAllowed = discount.allowedBusinesses?.some((b) => b.toString() === userBusinessId?.toString());
+        const isBusinessAllowed = discount.allowedBusinesses?.some((b) => b.toString() === cleanUserBusinessId?.toString());
 
         if (!isUserAllowed && !isBusinessAllowed) {
             throw new Error('Mã giảm giá này không áp dụng cho bạn');
@@ -40,9 +44,9 @@ export const validateAndCalculateDiscount = async ({
     }
 
     // 4. Giới hạn course
-    if (discount.courseIds && discount.courseIds.length > 0 && courseIds?.length) {
+    if (discount.courseIds && discount.courseIds.length > 0 && cleanCourseIds.length) {
         const allowedCourseIds = discount.courseIds.map((id) => id.toString());
-        const isValid = courseIds.some((c) => allowedCourseIds.includes(c));
+        const isValid = cleanCourseIds.some((c) => allowedCourseIds.includes(c));
         if (!isValid) throw new Error('Mã giảm giá không áp dụng cho các khóa học đã chọn');
     }
 
