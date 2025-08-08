@@ -10,90 +10,234 @@ import UserModel from '../models/User.model';
 import CertificateModel from '../models/Certificate.model';
 
 // Update lesson completion status via Progress model
-export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.user?._id;
-    const courseId = req.params.id;
-    const { lessonId, isCompleted } = req.body;
 
-    if (!courseId || !lessonId) {
-        return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
-    }
+// export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: any) => {
+//     const userId = req.user?._id;
+//     const courseId = req.params.id as string;
+//     const { lessonId, isCompleted } = req.body as { lessonId?: string; isCompleted?: boolean | string };
 
+//     if (!userId) return next(new ErrorHandler('Unauthorized', 401));
+//     if (!courseId || !lessonId) {
+//         return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
+//     }
+
+//     // Chuẩn hoá boolean để không bị dính "true"/"false" dạng string
+//     const completed = isCompleted === true || isCompleted === 'true';
+
+//     // 1) Lấy lesson & section
+//     const lesson = await LessonModel.findById(lessonId).populate('sectionId');
+//     if (!lesson) return next(new ErrorHandler('Lesson not found', 404));
+
+//     const sectionId = (lesson.sectionId as any)?._id || (lesson.sectionId as any);
+//     const section = await SectionModel.findById(sectionId);
+//     if (!section) return next(new ErrorHandler('Section not found', 404));
+
+//     const sectionLessonCount = section.lessons?.length || 0;
+
+//     // 2) Lấy progress (hoặc tạo mới)
+//     let progress = await ProgressModel.findOne({ user: userId, course: courseId });
+
+//     if (!progress) {
+//         // Lấy toàn bộ section + lesson của course
+//         const sections = await SectionModel.find({ course: courseId }).populate({ path: 'lessons', select: '_id' });
+
+//         const completedSections = sections.map((sec: any) => ({
+//             sectionId: sec._id,
+//             totalLessonsInSection: sec.lessons?.length || 0,
+//             completedLessons: 0,
+//             lessons: (sec.lessons || []).map((l: any) => ({
+//                 lessonId: l._id,
+//                 isCompleted: false
+//             }))
+//         }));
+
+//         const totalLessons = sections.reduce((sum: number, s: any) => sum + (s.lessons?.length || 0), 0);
+
+//         progress = new ProgressModel({
+//             user: userId,
+//             course: courseId,
+//             totalLessons,
+//             totalCompleted: 0,
+//             completedSections,
+//             progressPercentage: 0
+//         });
+//     }
+
+//     // An toàn: nếu totalLessons trong DB đang = 0 (data cũ), tính lại luôn
+//     if (!progress.totalLessons || progress.totalLessons === 0) {
+//         const allSections = await SectionModel.find({ course: courseId });
+//         progress.totalLessons = allSections.reduce((sum, sec) => sum + (sec.lessons?.length || 0), 0);
+//     }
+
+//     // 3) Tìm hoặc tạo sectionProgress
+//     let sectionProgress: any = progress.completedSections.find(
+//         (s: any) => s.sectionId.toString() === sectionId.toString()
+//     );
+
+//     if (!sectionProgress) {
+//         // Lần đầu thấy section này trong progress
+//         sectionProgress = {
+//             sectionId,
+//             completedLessons: completed ? 1 : 0,
+//             totalLessonsInSection: sectionLessonCount,
+//             lessons: [{ lessonId, isCompleted: completed }]
+//         };
+//         progress.completedSections.push(sectionProgress);
+//     } else {
+//         // Đồng bộ total lessons của section (phòng trường hợp thay đổi cấu trúc)
+//         if ((sectionProgress.totalLessonsInSection || 0) !== sectionLessonCount) {
+//             sectionProgress.totalLessonsInSection = sectionLessonCount;
+//         }
+//         if (!Array.isArray(sectionProgress.lessons)) sectionProgress.lessons = [];
+
+//         // Upsert lesson trong mảng lessons
+//         const idx = sectionProgress.lessons.findIndex((l: any) => l.lessonId.toString() === lessonId.toString());
+
+//         if (idx === -1) {
+//             sectionProgress.lessons.push({ lessonId, isCompleted: completed });
+//         } else {
+//             sectionProgress.lessons[idx].isCompleted = completed;
+//         }
+
+//         // Cập nhật lại completedLessons dựa trên lessons[]
+//         sectionProgress.completedLessons = sectionProgress.lessons.filter((l: any) => l.isCompleted).length;
+//     }
+
+//     // 4) Tính lại tổng completed & phần trăm
+//     const totalCompleted = progress.completedSections.reduce(
+//         (sum: number, sec: any) => sum + (sec.completedLessons || 0),
+//         0
+//     );
+
+//     progress.totalCompleted = totalCompleted;
+//     progress.progressPercentage =
+//         progress.totalLessons > 0 ? Math.round((totalCompleted / progress.totalLessons) * 100) : 0;
+
+//     // Cho Mongoose biết nested array đã thay đổi (an toàn khi sửa sâu)
+//     progress.markModified('completedSections');
+
+//     // 5) Lưu
+//     await progress.save();
+
+//     // (Tuỳ chọn) Cache bản progress tổng — không dùng cache per-lesson nữa
+//     await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
+
+//     // (Tuỳ chọn) Cấp chứng chỉ sau khi hoàn thành khoá
+//     await issueCertificateIfCompleted(userId.toString(), courseId.toString(), {
+//         totalCompleted: progress.totalCompleted,
+//         totalLessons: progress.totalLessons
+//     });
+
+//     return res.status(200).json({
+//         success: true,
+//         message: 'Lesson completion status updated successfully',
+//         data: progress
+//     });
+// });
+
+export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: any) => {
+    const userId = req.user?._id as string | undefined;
+    const courseId = req.params.id as string;
+    const { lessonId, isCompleted } = req.body as { lessonId?: string; isCompleted?: boolean | string };
+
+    if (!userId) return next(new ErrorHandler('Unauthorized', 401));
+    if (!courseId || !lessonId) return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
+
+    // Chuẩn hoá boolean
+    const completed = isCompleted === true || isCompleted === 'true';
+
+    // ===== 1) Lấy lesson & section (đảm bảo là lesson publish) =====
     const lesson = await LessonModel.findById(lessonId).populate('sectionId');
     if (!lesson) return next(new ErrorHandler('Lesson not found', 404));
+    const sectionId = (lesson.sectionId as any)?._id || (lesson.sectionId as any);
 
-    const section = await SectionModel.findById(lesson.sectionId._id);
+    const section = await SectionModel.findOne({ _id: sectionId, course: courseId, isPublished: true }).populate({
+        path: 'lessons',
+        match: { isPublished: true },
+        select: '_id',
+        options: { sort: { order: 1 } }
+    });
     if (!section) return next(new ErrorHandler('Section not found', 404));
 
-    const sectionTitle = section.title;
-    const sectionLength = section.lessons.length;
-
+    // ===== 2) Lấy progress hoặc seed mới từ cấu trúc course (publish) =====
     let progress = await ProgressModel.findOne({ user: userId, course: courseId });
     if (!progress) {
-        const totalLessons = await LessonModel.countDocuments({
-            sectionId: { $in: (await SectionModel.find({ courseId })).map((s) => s._id) }
-        });
+        const sections = await SectionModel.find({ course: courseId, isPublished: true })
+            .sort({ order: 1 })
+            .populate({
+                path: 'lessons',
+                match: { isPublished: true },
+                select: '_id',
+                options: { sort: { order: 1 } }
+            });
 
         progress = new ProgressModel({
             user: userId,
             course: courseId,
-            totalLessons,
-            totalCompleted: 0,
-            completedLessons: []
+            completedSections: sections.map((sec: any) => ({
+                sectionId: sec._id,
+                // totalLessonsInSection & completedLessons sẽ auto-calc
+                lessons: (sec.lessons || []).map((l: any) => ({
+                    lessonId: l._id,
+                    isCompleted: false
+                }))
+            }))
         });
-    }
-
-    // Tìm hoặc tạo section progress
-    let sectionProgress = progress.completedLessons.find((s: any) => s.section.name === sectionTitle);
-
-    if (!sectionProgress) {
-        sectionProgress = {
-            section: {
-                name: sectionTitle,
-                sectionLength,
-                lessons: [],
-                totalCompletedPerSection: 0
-            }
-        };
-        progress.completedLessons.push(sectionProgress);
-    }
-
-    const lessonIndex = sectionProgress.section.lessons.findIndex((l: any) => l.toString() === lessonId);
-
-    if (isCompleted) {
-        if (lessonIndex === -1) {
-            sectionProgress.section.lessons.push(lessonId);
-        }
     } else {
-        if (lessonIndex !== -1) {
-            sectionProgress.section.lessons.splice(lessonIndex, 1);
+        // ===== 2b) Đồng bộ lại completedSections theo cấu trúc thật (nếu có thay đổi) =====
+        // - đảm bảo mọi lesson publish đều có entry; không xoá entry cũ để không mất tiến độ
+        const secIdx = progress.completedSections.findIndex((s: any) => String(s.sectionId) === String(sectionId));
+        if (secIdx === -1) {
+            progress.completedSections.push({
+                sectionId,
+                lessons: (section.lessons || []).map((l: any) => ({ lessonId: l._id, isCompleted: false }))
+            } as any);
+        } else {
+            const secProg = progress.completedSections[secIdx];
+            const existing = new Map<string, boolean>();
+            for (const it of secProg.lessons || []) existing.set(String(it.lessonId), !!it.isCompleted);
+
+            // Upsert tất cả lesson publish hiện tại
+            const merged = (section.lessons || []).map((l: any) => {
+                const key = String(l._id);
+                return { lessonId: l._id, isCompleted: existing.has(key) ? existing.get(key)! : false };
+            });
+
+            secProg.lessons = merged as any;
+            progress.completedSections[secIdx] = secProg;
         }
     }
-    await LessonModel.findByIdAndUpdate(lessonId, { isCompleted }, { new: true });
 
-    sectionProgress.section.totalCompletedPerSection = sectionProgress.section.lessons.length;
+    // ===== 3) Đặt cờ hoàn thành cho lesson hiện tại =====
+    const targetSection = progress.completedSections.find((s: any) => String(s.sectionId) === String(sectionId));
+    if (!targetSection) return next(new ErrorHandler('Section progress not found after sync', 500));
 
-    progress.totalCompleted = progress.completedLessons.reduce(
-        (sum: any, sec: any) => sum + (sec.section.lessons?.length || 0),
-        0
-    );
+    const lIdx = targetSection.lessons.findIndex((l: any) => String(l.lessonId) === String(lessonId));
+    if (lIdx === -1) {
+        // Phòng hờ edge case
+        targetSection.lessons.push({ lessonId, isCompleted: completed } as any);
+    } else {
+        targetSection.lessons[lIdx].isCompleted = completed;
+    }
 
+    // ===== 4) Lưu (middleware sẽ tự tính counters & percentage) =====
+    progress.markModified('completedSections');
     await progress.save();
 
+    // (Optional) cache & certificate
     await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
-
-    // Check and issue certificate if completed
     await issueCertificateIfCompleted(userId.toString(), courseId.toString(), {
         totalCompleted: progress.totalCompleted,
         totalLessons: progress.totalLessons
     });
 
-    res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Lesson completion status updated successfully',
         data: progress
     });
 });
+
 
 // Get progress data by userId & courseId
 export const getProgressData = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
