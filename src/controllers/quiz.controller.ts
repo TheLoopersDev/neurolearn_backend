@@ -6,6 +6,27 @@ import ErrorHandler from '../utils/ErrorHandler';
 import mongoose from 'mongoose';
 import { IQuestion } from '../interfaces/Quiz';
 
+const TAG_QUIZZES = 'tag:quizzes';
+
+export async function getCache(key: string) {
+    const data = await redis.get(key);
+    return data ? JSON.parse(data) : null;
+}
+
+export async function setCache(key: string, value: unknown, ttlSeconds = 3600) {
+    // Lưu data
+    await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    // Lưu key vào set tag để tiện invalidate theo nhóm
+    await redis.sadd(TAG_QUIZZES, key);
+}
+
+// Xóa toàn bộ cache thuộc nhóm quizzes
+export async function invalidateQuizzesCache() {
+    const keys = await redis.smembers(TAG_QUIZZES);
+    if (keys.length) await redis.del(...keys);
+    // Clear set
+    await redis.del(TAG_QUIZZES);
+}
 // GET /api/quizzes/:quizId - Fetch a quiz by ID
 export const getQuizById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
@@ -102,42 +123,35 @@ export const createQuiz = catchAsync(async (req: Request, res: Response, next: N
 });
 
 // GET /api/quizzes - Fetch all quizzes (without pagination)
-export const getAllQuizzes = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { courseId, difficulty } = req.query;
+export const getAllQuizzes = catchAsync(async (req, res) => {
+    const { courseId, difficulty, noCache } = req.query as {
+        courseId?: string;
+        difficulty?: string;
+        noCache?: string;
+    };
 
-    // Tạo key cache theo query
     const cacheKey = `quizzes:${courseId || 'all'}:${difficulty || 'all'}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-        return res.status(200).json({
-            success: true,
-            quizzes: JSON.parse(cached),
-            cached: true
-        });
+    if (noCache !== '1') {
+        const cached = await getCache(cacheKey);
+        if (cached) {
+            return res.status(200).json({ success: true, quizzes: cached, cached: true });
+        }
     }
 
-    // Xây query
     const query: any = {};
-    if (courseId && mongoose.Types.ObjectId.isValid(courseId.toString())) {
-        query.courseId = courseId;
-    }
-    if (difficulty) {
-        query.difficulty = difficulty;
-    }
+    if (courseId && mongoose.Types.ObjectId.isValid(courseId)) query.courseId = courseId;
+    if (difficulty) query.difficulty = difficulty;
 
-    // Truy vấn DB
     const quizzes = await Quiz.find(query)
         .populate('instructorId', 'name email avatar')
-        .populate('courseId', 'title tags');
+        .populate('courseId', 'title tags')
+        .lean();
 
-    // Lưu cache
-    await redis.set(cacheKey, JSON.stringify(quizzes), 'EX', 3600); // 1 giờ
+    await setCache(cacheKey, quizzes, 3600);
 
-    res.status(200).json({
-        success: true,
-        quizzes
-    });
+    res.status(200).json({ success: true, quizzes });
 });
+
 
 // PUT /api/quizzes/:quizId - Update a quiz
 export const updateQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
