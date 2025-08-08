@@ -19,6 +19,9 @@ import {
     updateUserRoleService,
     getAllInstructorsService
 } from '../services/user.service';
+import ProgressModel from '@/models/Progress.model';
+import CourseModel from '@/models/Course.model';
+import QuizModel from '@/models/Quiz.model';
 
 dotenv.config();
 
@@ -236,7 +239,7 @@ export const logoutUser = catchAsync(async (req: Request, res: Response, next: N
 export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     // Try to get refresh token from cookies first
     let refresh_token = req.cookies.refresh_token as string;
-    
+
     // If not in cookies, try to get from Authorization header
     if (!refresh_token) {
         const authHeader = req.headers.authorization;
@@ -246,11 +249,11 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
             refresh_token = authHeader.substring(7);
         }
     }
-    
+
     if (!refresh_token) {
         return next(new ErrorHandler('No refresh token provided', 400));
     }
-    
+
     try {
         // First try to verify as refresh token
         let decoded;
@@ -293,93 +296,6 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
         return next(new ErrorHandler('Invalid refresh token', 401));
     }
 });
-// export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-//     console.log('--- updateAccessToken Middleware Start ---');
-//     console.log('Cookies received by Express:', req.cookies); // Log ALL cookies
-
-//     try {
-//         const accessToken = req.cookies.access_token;
-//         const refreshToken = req.cookies.refresh_token;
-
-//         console.log('accessToken:', accessToken);
-//         console.log('refreshToken:', refreshToken);
-
-//         // 1. Check Access Token (Optional, but good for debugging)
-//         if (accessToken) {
-//             try {
-//                 const decodedAccessToken = jwt.verify(accessToken, process.env.ACCESS_TOKEN!) as { id: string };
-//                 console.log('Decoded Access Token:', decodedAccessToken);
-//                 // If access token is valid, you *could* just proceed.
-//                 // However, for consistent refresh logic, it's common to *always* refresh.
-//                 // req.user = decodedAccessToken; // You might set req.user here
-//                 // return next(); // You could return early here
-//             } catch (accessError) {
-//                 console.error('Access Token Verification Error:', accessError);
-//                 // Access token is invalid or expired.  Proceed to refresh logic.
-//             }
-//         }
-
-//         // 2. Refresh Token Verification (Required)
-//         if (!refreshToken) {
-//             console.log('No refresh token provided.');
-//             console.log('--- updateAccessToken Middleware End (No Refresh Token) ---');
-//             return res.status(400).json({ message: 'No refresh token provided' }); // 400 Bad Request
-//         }
-
-//         let decodedRefreshToken;
-//         try {
-//             decodedRefreshToken = jwt.verify(refreshToken, process.env.REFRESH_TOKEN!) as { id: string };
-//             console.log('Decoded Refresh Token:', decodedRefreshToken);
-//         } catch (refreshError) {
-//             console.error('Refresh Token Verification Error:', refreshError);
-//             console.log('--- updateAccessToken Middleware End (Invalid Refresh Token) ---');
-//             return res.status(401).json({ message: 'Invalid refresh token' }); // 401 Unauthorized
-//         }
-
-//         // 3. Redis Check (If you are using Redis)
-//         if (redis) {
-//             // Check if redisClient is defined
-//             try {
-//                 const session = await redis.get(`user:${decodedRefreshToken.id}`);
-//                 console.log('Redis Session Data:', session);
-
-//                 if (!session) {
-//                     console.log('No session found in Redis.');
-//                     console.log('--- updateAccessToken Middleware End (No Session) ---');
-//                     return res.status(401).json({ message: 'Session expired' }); // Or a 400, depending on your preference
-//                 }
-
-//                 // Optionally, parse the session data if it's stored as JSON
-//                 // const userData = JSON.parse(session) as IUser;
-//                 // req.user = userData;
-//             } catch (redisError) {
-//                 console.error('Redis Error:', redisError);
-//                 console.log('--- updateAccessToken Middleware End (Redis Error) ---');
-//                 return res.status(500).json({ message: 'Internal server error (Redis)' });
-//             }
-//         } else {
-//             console.log('Redis client is not initialized.'); // Add this log
-//             // Handle the case where Redis is not being used.  You might have a fallback mechanism.
-//         }
-//         // 4. Generate New Access Token (If refresh token is valid and session exists)
-//         const newAccessToken = jwt.sign({ id: decodedRefreshToken.id }, process.env.ACCESS_TOKEN!, { expiresIn: '1m' }); // Keep it short!
-//         console.log('New Access Token Generated:', newAccessToken);
-
-//         // 5. Set New Access Token Cookie
-//         res.cookie('access_token', newAccessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-
-//         // 6. Attach User to Request (Optional, but common)
-//         // If you have user data, you can attach it to the request object.
-//         // req.user = { id: decodedRefreshToken.id }; // Or the full user object from Redis/DB
-
-//         console.log('--- updateAccessToken Middleware End (Success) ---');
-//         next();
-//     } catch (error) {
-//         console.error('Unexpected Error in updateAccessToken:', error);
-//         console.log('--- updateAccessToken Middleware End (Unexpected Error) ---');
-//         return res.status(500).json({ message: 'Internal server error' });
-//     }
-// });
 
 export const refreshToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const refresh_token = req.cookies.refresh_token as string;
@@ -722,4 +638,114 @@ export const getInstructorsWithSort = catchAsync(async (req: Request, res: Respo
         success: true,
         instructors: users
     });
+});
+
+export const getUserDashboardData = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { userId } = req.params;
+
+        // 1️⃣ Lấy thông tin user (để lấy danh sách purchasedCourses)
+        const user = (await UserModel.findById(userId)
+            .populate('purchasedCourses')
+            .populate('uploadedCourses')
+            .lean()) as unknown as {
+            _id: string;
+            purchasedCourses: any[];
+            uploadedCourses: any[];
+        } | null;
+
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // 2️⃣ Thống kê stats
+        const totalCourses = user.purchasedCourses?.length || 0;
+        const completedCourses = await ProgressModel.countDocuments({
+            user: userId,
+            progressPercentage: 100
+        });
+
+        const certificates = completedCourses; // giả sử cấp chứng chỉ khi hoàn thành
+
+        const totalHoursSpent = await ProgressModel.aggregate([
+            { $match: { user: user._id } },
+            {
+                $group: {
+                    _id: null,
+                    totalHours: { $sum: '$totalCompleted' } // hoặc trường riêng nếu có log giờ học
+                }
+            }
+        ]);
+
+        const stats = {
+            totalCourses,
+            completedCourses,
+            certificates,
+            hoursSpent: totalHoursSpent[0]?.totalHours ?? 0
+        };
+
+        // 3️⃣ Lấy latest course (theo ngày tạo mới nhất trong purchasedCourses)
+        const latestCourse = await CourseModel.findOne({
+            _id: { $in: user.purchasedCourses }
+        })
+            .sort({ createdAt: -1 })
+            .populate('authorId', 'name avatar profession')
+            .lean();
+
+        // 4️⃣ Related courses (toàn bộ purchasedCourses)
+        const relatedCourses = user.purchasedCourses || [];
+
+        // 5️⃣ Thống kê student chart (view / buy)
+        const studentStats = await ProgressModel.aggregate([
+            { $match: { user: user._id } },
+            {
+                $lookup: {
+                    from: 'courses',
+                    localField: 'course',
+                    foreignField: '_id',
+                    as: 'course'
+                }
+            },
+            { $unwind: '$course' },
+            {
+                $project: {
+                    name: '$course.name',
+                    buy: '$totalCompleted',
+                    view: '$totalLessons'
+                }
+            }
+        ]);
+
+        // 6️⃣ Upcoming Exams: Quiz liên kết với purchasedCourses và chưa làm xong
+        const upcomingExams = await QuizModel.find({
+            courseId: { $in: user.purchasedCourses },
+            isPublished: true
+        })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('courseId', 'name thumbnail.url')
+            .lean();
+
+        // Chuẩn hóa dữ liệu UpcomingExam cho UI
+        const examsForUI = upcomingExams.map((exam) => ({
+            courseName: (exam.courseId as any)?.name,
+            thumbnail: (exam.courseId as any)?.thumbnail?.url,
+            exams: [
+                {
+                    name: exam.name,
+                    duration: exam.duration
+                }
+            ]
+        }));
+
+        // 7️⃣ Trả về toàn bộ dashboard data
+        return res.json({
+            stats,
+            latestCourse,
+            relatedCourses,
+            studentStats,
+            upcomingExams: examsForUI
+        });
+    } catch (error) {
+        console.error('getUserDashboardData error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });

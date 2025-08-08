@@ -202,6 +202,7 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 // get single course without purchase
 import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
+import ProgressModel from '@/models/Progress.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -715,99 +716,70 @@ export const getAllCoursesWithoutPurchase = catchAsync(async (req: Request, res:
 });
 
 // get course content -- only for valid user
-export const getPurchasedCourseByUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const userCourseList = req.user?.purchasedCourses;
-    const courseId = req.params.id;
 
-    // Check if the user has purchased the course
-    const courseExists = userCourseList?.find((c: any) => c === courseId.toString());
-    if (!courseExists) {
-        return next(new ErrorHandler('You are not eligible to access this course', 404));
+export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const purchasedCourses = req?.user?.purchasedCourses;
+
+    if (!purchasedCourses || purchasedCourses.length === 0) {
+        return next(new ErrorHandler('No purchased courses found', 404));
     }
 
-    // Fetch the course
-    const course = await CourseModel.findById(courseId).populate({
-        path: 'courseData.quizzes',
-        model: 'Quiz'
-    });
+    // Lấy thông tin khóa học từ cơ sở dữ liệu
+    const courses = await CourseModel.find({
+        _id: { $in: purchasedCourses }
+    })
+        .populate('authorId', 'name email')
+        .populate('category', 'name')
+        .populate('subCategory', 'name')
+        .lean();
 
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
+    if (!courses || courses.length === 0) {
+        return next(new ErrorHandler('Courses not found', 404));
     }
 
-    // Filter out unpublished or invalid course data
-    course.courseData = course.courseData.filter(
-        (c: any) => c?.title && c?.description && c?.isPublished && c?.isPublishedSection && c?.videoSection
+    // Lấy thông tin tiến độ cho từng khóa học
+    const coursesWithProgress = await Promise.all(
+        courses.map(async (course) => {
+            // Tìm tiến độ của khóa học theo user và courseId
+            const progress = await ProgressModel.findOne({
+                course: course._id,
+                user: req.user._id // Lấy tiến độ cho người dùng hiện tại
+            }).lean(); // sử dụng lean() để lấy kết quả là đối tượng JavaScript thay vì Mongoose document
+
+            // Kiểm tra nếu progress không tồn tại hoặc bị lỗi
+            if (!progress || Array.isArray(progress)) {
+                return {
+                    ...course,
+                    progress: 0 // Nếu không có tiến độ, mặc định là 0%
+                };
+            }
+
+            // Kiểm tra nếu progress có các trường totalCompleted và totalLessons
+            const totalLessons = progress?.totalLessons || 0; // Kiểm tra progress là đối tượng
+            const totalCompleted = progress?.totalCompleted || 0;
+
+            // Tính toán phần trăm tiến độ
+            const progressPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0; // Nếu không có lessons, trả về 0%
+
+            // Số lượng phần của khóa học
+            const sectionsCount = course.sections?.length || 0;
+
+            // Thời gian tổng khóa học (đơn vị: giờ)
+            const durationInHours = (course.duration / 60).toFixed(1);
+
+            return {
+                ...course,
+                sectionsCount,
+                duration: `${durationInHours} hours`,
+                progress: progressPercentage // Thêm thông tin tiến độ vào dữ liệu khóa học
+            };
+        })
     );
 
-    // Sort courseData by sectionOrder and lessonOrder
-    const sortedCourseData = course.courseData.sort((a: any, b: any) => {
-        if (a.sectionOrder !== b.sectionOrder) {
-            return a.sectionOrder - b.sectionOrder; // Sort by sectionOrder first
-        }
-        return a.lessonOrder - b.lessonOrder; // If sectionOrder is the same, sort by lessonOrder
-    });
-
-    // Group courseData by section
-    const sections: { [key: string]: any[] } = {};
-    sortedCourseData.forEach((item: any) => {
-        if (!sections[item.videoSection]) {
-            sections[item.videoSection] = [];
-        }
-        sections[item.videoSection].push(item);
-    });
-
-    // Insert quizzes into the correct position in each section and calculate section durations
-    const finalCourseData: any[] = [];
-    for (const sectionName in sections) {
-        const sectionItems = sections[sectionName];
-
-        // Calculate total duration of videos in the section
-        const sectionVideoLength = sectionItems.reduce(
-            (totalLength: number, item: any) => totalLength + (item?.videoLength || 0),
-            0
-        );
-
-        // Find the quizzes for this section and calculate their total duration
-        const quizzes = sectionItems.flatMap((item: any) => item.quizzes);
-        const sectionQuizDuration = quizzes.reduce(
-            (totalDuration: number, quiz: any) => totalDuration + (quiz.duration || 0),
-            0
-        );
-
-        // Total section duration
-        const totalSectionLength = sectionVideoLength + sectionQuizDuration;
-
-        // Add lessons to the final course data
-        finalCourseData.push(...sectionItems);
-
-        // Add quizzes to the final course data (at the end of the section)
-        if (quizzes.length > 0) {
-            finalCourseData.push({
-                _id: `quiz-section-${sectionName}`,
-                title: `Quiz for ${sectionName}`,
-                description: `Quiz for ${sectionName}`,
-                videoSection: sectionName,
-                isQuiz: true, // Flag to identify quizzes
-                quizzes: quizzes,
-                sectionOrder: sectionItems[0].sectionOrder,
-                lessonOrder: sectionItems.length + 1, // Place quizzes at the end of the section
-                videoLength: sectionQuizDuration // Assign quiz duration to videoLength for consistency
-            });
-        }
-
-        // Add section duration to each section item
-        sectionItems.forEach((item: any) => {
-            item.sectionDuration = totalSectionLength;
-        });
-    }
-
-    // Update the course data with the final structure
-    course.courseData = finalCourseData;
-
+    // Trả về dữ liệu khóa học với chi tiết và tiến độ
     res.status(200).json({
         success: true,
-        course
+        data: coursesWithProgress
     });
 });
 
@@ -1107,43 +1079,48 @@ export const getAllCourses = catchAsync(async (req: Request, res: Response, next
 ]);
 
 // delete course -- for admin
+
 export const deleteCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
-    // Find the course by ID
+    // Tìm khóa học trong bảng Course
     const course = await CourseModel.findById(id);
-
     if (!course) {
         return next(new ErrorHandler('Course not found', 404));
     }
 
-    // If the course has a thumbnail, delete it from Cloudinary
+    // Nếu khóa học có thumbnail, xóa nó khỏi Cloudinary
     if (course?.thumbnail?.public_id) {
         await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
     }
 
-    // Delete the course
-    await course.deleteOne({ id });
+    // Xóa tất cả các section liên quan đến khóa học
+    await SectionModel.deleteMany({ course: id });
 
-    // Update users who have purchased the course
+    // Xóa tất cả các lesson liên quan đến các section của khóa học
+    await LessonModel.deleteMany({ course: id });
+
+    // Xóa khóa học khỏi bảng Course
+    await course.deleteOne({ _id: id });
+
+    // Cập nhật bảng User để xóa khóa học khỏi purchasedCourses và uploadedCourses
     await UserModel.updateMany(
-        { purchasedCourses: id }, // Find users with the course ID
-        { $pull: { purchasedCourses: id } } // Remove the course ID from purchasedCourses
+        { purchasedCourses: id }, // Tìm người dùng đã mua khóa học
+        { $pull: { purchasedCourses: id } } // Loại bỏ khóa học khỏi purchasedCourses
     );
 
-    // Update users who uploaded the course
     await UserModel.updateMany(
-        { uploadedCourses: id }, // Find users with the uploaded course ID
-        { $pull: { uploadedCourses: id } } // Remove the course ID from uploadedCourses
+        { uploadedCourses: id }, // Tìm người dùng đã tải lên khóa học
+        { $pull: { uploadedCourses: id } } // Loại bỏ khóa học khỏi uploadedCourses
     );
 
-    // Optionally, delete the course ID from Redis cache
+    // Xóa thông tin khóa học khỏi cache Redis (nếu có)
     await redis.del(id);
 
-    // Respond with success message
+    // Trả về thông báo thành công
     res.status(200).json({
         success: true,
-        message: 'Course deleted successfully'
+        message: 'Course, sections, and lessons deleted successfully'
     });
 });
 
@@ -1226,7 +1203,7 @@ export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res
                 name: course.name,
                 subTitle: course.subTitle,
                 thumbnail: course.thumbnail ? { url: course.thumbnail.url } : null,
-                author: course.authorId,
+                publisher: course.authorId,
                 category: course.category,
                 rating: course.rating,
                 price: course.price,
@@ -1583,50 +1560,158 @@ export const updateLessonCompletionStatus = catchAsync(async (req: Request, res:
     });
 });
 
-// get purchased courses of user
-export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    console.log(req?.user?.purchasedCourses);
-
-    const course = await CourseModel.find({
-        _id: { $in: req?.user?.purchasedCourses }
-    })
-        .populate('authorId', 'name email')
-        .populate('category', 'name')
-        .lean();
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
-    const coursesWithDetails = course.map((course) => {
-        const lessonsCount = course.courseData?.length || 0;
-
-        const duration =
-            course.courseData?.reduce((acc: number, curr: { videoLength?: number }) => {
-                return acc + (curr.videoLength || 0);
-            }, 0) || 0;
-
-        const durationInHours = (duration / 60).toFixed(1);
-
-        return {
-            ...course,
-            lessonsCount,
-            duration: `${durationInHours} hours`
-        };
-    });
-    res.status(200).json({
-        success: true,
-        data: {
-            course: coursesWithDetails
-        }
-    });
-});
-
 //get single course by id
-export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
+// export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+//     const courseId = req.params.id;
 
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide course id', 400));
-    }
+//     if (!courseId) {
+//         return next(new ErrorHandler('Please provide course id', 400));
+//     }
+
+//     const course = await CourseModel.findById(courseId).populate([
+//         { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
+//         { path: 'level', select: 'name' },
+//         { path: 'category', select: 'name' },
+//         { path: 'subCategory', select: 'name' }
+//     ]);
+
+//     if (!course) {
+//         return next(new ErrorHandler('Course not found', 404));
+//     }
+
+//     // Populate Sections từ Course
+//     const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
+//         .sort({ order: 1 })
+//         .populate([
+//             {
+//                 path: 'lessons',
+//                 match: { isPublished: true },
+//                 options: { sort: { order: 1 } }
+//             },
+//             {
+//                 path: 'quizzes',
+//                 select: 'name examTitle duration difficulty totalQuestions isPublished sectionOrder lessonOrder',
+//                 match: { isPublished: true }
+//             }
+//         ])
+//         .lean();
+
+//     // Xử lý ẩn video nếu không miễn phí
+//     const processedSections = sections.map((section) => ({
+//         ...section,
+//         lessons: Array.isArray(section.lessons)
+//             ? section.lessons.map((lesson) => ({
+//                   ...lesson,
+//                   videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+//               }))
+//             : [],
+//         quizzes: Array.isArray(section.quizzes) ? section.quizzes : []
+//     }));
+
+//     const totalLessons = processedSections.reduce(
+//         (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
+//         0
+//     );
+
+//     // Tổng học sinh
+//     const instructorCourseIds = course.authorId?.uploadedCourses || [];
+//     const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
+//     const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
+
+//     const totalCourses = instructorCourseIds.length;
+
+//     const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
+//     const hours = Math.floor(durationInMinutes / 60);
+//     const minutes = durationInMinutes % 60;
+//     const durationText = `${hours}h ${minutes}m`;
+
+//     return res.status(200).json({
+//         success: true,
+//         course: {
+//             _id: course._id,
+//             name: course.name,
+//             subTitle: course.subTitle,
+//             description: course.description,
+//             thumbnail: course.thumbnail,
+//             demoUrl: course.demoUrl,
+//             price: course.price,
+//             estimatedPrice: course.estimatedPrice,
+//             isFree: course.isFree,
+//             purchased: course.purchased ?? 0,
+//             level: course.level?.name ?? null,
+//             reviews: course.reviews || [],
+//             rating: course.rating ?? 0,
+//             category: course.category,
+//             subCategory: course.subCategory,
+//             overview: course.overview || '',
+//             topics: Array.isArray(course.topics) ? course.topics : [],
+//             totalLessons,
+//             durationText,
+//             sections: processedSections,
+//             publisher: {
+//                 name: course.authorId?.name || '',
+//                 avatar: course.authorId?.avatar || '',
+//                 email: course.authorId?.email || '',
+//                 profession: course.authorId?.profession || '',
+//                 description: course.authorId?.introduce || '',
+//                 rating: course.rating ?? 0,
+//                 students: totalStudents,
+//                 courses: totalCourses
+//             }
+//         }
+//     });
+// });
+
+// ===== Helper: đếm tổng lesson publish của course (đúng order) =====
+async function countTotalLessonsOfCourse(courseId: string) {
+    const sections = await SectionModel.find({ course: courseId, isPublished: true })
+        .sort({ order: 1 })
+        .select('_id lessons')
+        .populate({
+            path: 'lessons',
+            match: { isPublished: true },
+            select: '_id',
+            options: { sort: { order: 1 } }
+        })
+        .lean();
+
+    const total = sections.reduce((sum, s: any) => sum + (s.lessons?.length || 0), 0);
+    return { sections, total };
+}
+
+// ===== Helper: seed progress nếu chưa có (tạo rỗng tất cả lesson publish) =====
+async function ensureProgressSeeded(userId: string, courseId: string) {
+    let progress = await ProgressModel.findOne({ user: userId, course: courseId }).lean();
+    if (progress) return progress;
+
+    const { sections } = await countTotalLessonsOfCourse(courseId);
+
+    const completedSections = sections.map((sec: any) => ({
+        sectionId: sec._id,
+        // totalLessonsInSection & completedLessons sẽ auto-calc từ sub-schema
+        lessons: (sec.lessons || []).map((l: any) => ({
+            lessonId: l._id,
+            isCompleted: false
+        }))
+    }));
+
+    // create() sẽ chạy save middleware => auto-calc totals
+    const created = await ProgressModel.create({
+        user: userId,
+        course: courseId,
+        completedSections
+    });
+
+    const fresh = await ProgressModel.findById(created._id).lean();
+    return fresh!;
+}
+
+export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = req.params.id as string;
+    const userId = req.user?._id as string | undefined;
+    console.log('course-data req.user:', req.user?._id);
+
+    if (!courseId) return next(new ErrorHandler('Please provide course id', 400));
 
     const course = await CourseModel.findById(courseId).populate([
         { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
@@ -1634,19 +1719,17 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         { path: 'category', select: 'name' },
         { path: 'subCategory', select: 'name' }
     ]);
+    if (!course) return next(new ErrorHandler('Course not found', 404));
 
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
-
-    // Populate Sections từ Course
+    // Sections/lessons/quizzes (publish + order + lean)
     const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
         .sort({ order: 1 })
         .populate([
             {
                 path: 'lessons',
                 match: { isPublished: true },
-                options: { sort: { order: 1 } }
+                options: { sort: { order: 1 } },
+                select: '_id title order videoLength isFree videoUrl sectionId'
             },
             {
                 path: 'quizzes',
@@ -1656,34 +1739,81 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         ])
         .lean();
 
-    // Xử lý ẩn video nếu không miễn phí
-    const processedSections = sections.map((section) => ({
-        ...section,
-        lessons: Array.isArray(section.lessons)
-            ? section.lessons.map((lesson) => ({
-                  ...lesson,
-                  videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-              }))
-            : [],
-        quizzes: Array.isArray(section.quizzes) ? section.quizzes : []
-    }));
+    // ===== Progress (seed nếu cần) =====
+    let progressDoc: any = null;
+    if (userId) {
+        progressDoc = await ensureProgressSeeded(userId.toString(), courseId.toString());
+    }
 
-    const totalLessons = processedSections.reduce(
-        (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
-        0
-    );
+    // sectionId -> Set(lessonId hoàn thành)
+    const completedMap = new Map<string, Set<string>>();
+    for (const sec of progressDoc?.completedSections || []) {
+        const sid = String(sec.sectionId);
+        const set = new Set<string>();
+        for (const l of sec.lessons || []) {
+            if (l?.isCompleted) set.add(String(l.lessonId));
+        }
+        completedMap.set(sid, set);
+    }
 
-    // Tổng học sinh
+    // Merge isCompleted vào lessons + tính % theo section
+    const processedSections = sections.map((section: any) => {
+        const sid = String(section._id);
+        const doneSet = completedMap.get(sid) ?? new Set<string>();
+
+        const lessons = (section.lessons || []).map((lesson: any) => {
+            const lid = String(lesson._id);
+            return {
+                ...lesson,
+                isCompleted: doneSet.has(lid),
+                videoUrl: lesson.isFree ? lesson.videoUrl : undefined // ẩn link nếu không free
+            };
+        });
+
+        const quizzes = Array.isArray(section.quizzes) ? section.quizzes : [];
+        const completedCount = lessons.filter((l: any) => l.isCompleted).length;
+        const totalInSec = lessons.length;
+        const sectionProgressPercentage = totalInSec ? Math.round((completedCount / totalInSec) * 100) : 0;
+
+        return {
+            _id: section._id,
+            title: section.title,
+            order: section.order,
+            lessons,
+            quizzes,
+            completedCount,
+            totalLessonsInSection: totalInSec,
+            sectionProgressPercentage
+        };
+    });
+
+    // Tổng số lesson publish hiện tại
+    const totalLessons = processedSections.reduce((sum, s) => sum + (s.totalLessonsInSection || 0), 0);
+
+    // Tổng kết progress (tính theo dữ liệu vừa merge, không ghi DB)
+    let progressSummary: any = null;
+    if (userId && progressDoc) {
+        const totalCompleted = processedSections.reduce((acc, s) => acc + (s.completedCount || 0), 0);
+        const progressPercentage = totalLessons ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+        progressSummary = { totalLessons, totalCompleted, progressPercentage };
+    }
+
+    // Publisher stats
     const instructorCourseIds = course.authorId?.uploadedCourses || [];
-    const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
-    const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
-
+    const instructorCourses = instructorCourseIds.length
+        ? await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean()
+        : [];
+    const totalStudents = instructorCourses.reduce((sum, c: any) => sum + (c.purchased || 0), 0);
     const totalCourses = instructorCourseIds.length;
 
     const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
     const hours = Math.floor(durationInMinutes / 60);
     const minutes = durationInMinutes % 60;
     const durationText = `${hours}h ${minutes}m`;
+
+    // (Tuỳ chọn) Nếu muốn **đồng bộ** totals cũ trong progressDoc với số publish hiện tại,
+    // nhưng không ghi DB: bạn đã có progressSummary ở trên để FE dùng.
 
     return res.status(200).json({
         success: true,
@@ -1705,9 +1835,10 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             subCategory: course.subCategory,
             overview: course.overview || '',
             topics: Array.isArray(course.topics) ? course.topics : [],
-            totalLessons,
             durationText,
-            sections: processedSections,
+            totalLessons,
+            sections: processedSections, // ✅ mỗi lesson có isCompleted đã merge
+            progress: progressSummary, // ✅ tổng quan để hiển thị progress bar
             publisher: {
                 name: course.authorId?.name || '',
                 avatar: course.authorId?.avatar || '',
@@ -1721,6 +1852,9 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         }
     });
 });
+
+
+
 
 export const getReviewCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
