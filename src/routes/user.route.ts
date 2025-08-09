@@ -22,7 +22,8 @@ import {
     updateUserSocialLinks,
     getUser,
     getTopInstructors,
-    getUserDashboardData
+    getUserDashboardData,
+    getUserPurchasedCoursesMobile
 } from '../controllers/user.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
@@ -653,5 +654,7 @@ router.delete('/delete-user:id', isAuthenticated, authorizeRoles('admin'), delet
  *         description: User not found
  */
 router.get('/dashboard/:userId', updateAccessToken, isAuthenticated, getUserDashboardData);
+
+router.get('/purchase-course-mobile', getUserPurchasedCoursesMobile);
 
 export = router;

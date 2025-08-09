@@ -14,18 +14,16 @@ export async function getCache(key: string) {
 }
 
 export async function setCache(key: string, value: unknown, ttlSeconds = 3600) {
-    // Lưu data
     await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-    // Lưu key vào set tag để tiện invalidate theo nhóm
     await redis.sadd(TAG_QUIZZES, key);
 }
 
-// Xóa toàn bộ cache thuộc nhóm quizzes
 export async function invalidateQuizzesCache() {
     const keys = await redis.smembers(TAG_QUIZZES);
-    if (keys.length) await redis.del(...keys);
-    // Clear set
-    await redis.del(TAG_QUIZZES);
+    if (keys.length) {
+        await redis.del(...keys);
+        await redis.del(TAG_QUIZZES);
+    }
 }
 // GET /api/quizzes/:quizId - Fetch a quiz by ID
 export const getQuizById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -73,29 +71,22 @@ export const createQuiz = catchAsync(async (req: Request, res: Response, next: N
         category,
         progress,
         questions,
-        instructorId,
         courseId,
         description,
         difficulty,
         passingScore,
         maxAttempts,
         isPublished,
-        sectionOrder,
-        lessonOrder
+        sectionId, // ✅ nếu muốn gán quiz vào section ngay từ đầu
+        order // ✅ thứ tự trong section
     } = req.body;
 
-    // Temporarily skip required field validation
-    // if (!name || !duration || !difficulty || !passingScore || !maxAttempts || !instructorId || !courseId) {
-    //     return next(new ErrorHandler('Missing required fields', 400));
-    // }
+    const instructorId = req.user?._id;
+    if (!instructorId) {
+        return next(new ErrorHandler('Instructor ID not found from auth', 401));
+    }
 
-    // Optional: Validate if course exists
-    // const courseExists = await Course.findById(courseId);
-    // if (!courseExists) {
-    //     return next(new ErrorHandler('Course not found', 404));
-    // }
-
-    // Create quiz document
+    // Tạo quiz document
     const quiz = await Quiz.create({
         name,
         examTitle,
@@ -106,15 +97,17 @@ export const createQuiz = catchAsync(async (req: Request, res: Response, next: N
         questions,
         instructorId,
         courseId,
+        sectionId: sectionId || undefined, // optional
+        order: typeof order === 'number' ? order : 0, // optional
         description,
         difficulty,
         passingScore,
         maxAttempts,
         isPublished,
-        sectionOrder,
-        lessonOrder,
-        totalQuestions: questions?.length || 0
+        totalQuestions: Array.isArray(questions) ? questions.length : 0
     });
+
+    await invalidateQuizzesCache();
 
     res.status(201).json({
         success: true,
@@ -124,13 +117,23 @@ export const createQuiz = catchAsync(async (req: Request, res: Response, next: N
 
 // GET /api/quizzes - Fetch all quizzes (without pagination)
 export const getAllQuizzes = catchAsync(async (req, res) => {
-    const { courseId, difficulty, noCache } = req.query as {
+    const {
+        courseId,
+        difficulty,
+        noCache,
+        instructorId: qInstructorId
+    } = req.query as {
         courseId?: string;
         difficulty?: string;
         noCache?: string;
+        instructorId?: string;
     };
 
-    const cacheKey = `quizzes:${courseId || 'all'}:${difficulty || 'all'}`;
+    const authUserId = (req.user?._id as string | undefined) || undefined;
+    const instructorId = qInstructorId || authUserId;
+
+    const cacheKey = `quizzes:${courseId || 'all'}:${difficulty || 'all'}:${instructorId || 'all'}`;
+
     if (noCache !== '1') {
         const cached = await getCache(cacheKey);
         if (cached) {
@@ -141,6 +144,7 @@ export const getAllQuizzes = catchAsync(async (req, res) => {
     const query: any = {};
     if (courseId && mongoose.Types.ObjectId.isValid(courseId)) query.courseId = courseId;
     if (difficulty) query.difficulty = difficulty;
+    if (instructorId && mongoose.Types.ObjectId.isValid(instructorId)) query.instructorId = instructorId;
 
     const quizzes = await Quiz.find(query)
         .populate('instructorId', 'name email avatar')
@@ -151,7 +155,6 @@ export const getAllQuizzes = catchAsync(async (req, res) => {
 
     res.status(200).json({ success: true, quizzes });
 });
-
 
 // PUT /api/quizzes/:quizId - Update a quiz
 export const updateQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -203,6 +206,7 @@ export const updateQuiz = catchAsync(async (req: Request, res: Response, next: N
 
     // Clear cache if exists
     await redis.del(`quiz:${quizId}`);
+    await invalidateQuizzesCache();
 
     res.status(200).json({
         success: true,
@@ -231,6 +235,7 @@ export const deleteQuiz = catchAsync(async (req: Request, res: Response, next: N
 
     // Xóa cache nếu có
     await redis.del(`quiz:${quizId}`);
+    await invalidateQuizzesCache();
 
     res.status(200).json({
         success: true,
@@ -271,6 +276,7 @@ export const submitQuiz = catchAsync(async (req: Request, res: Response, next: N
 
     // Save the updated quiz
     await quiz.save();
+    await invalidateQuizzesCache();
 
     // Return the result
     res.status(200).json({
@@ -359,6 +365,7 @@ export const reorderQuestion = catchAsync(async (req: Request, res: Response, ne
 
     quiz.questions = reorderedQuestions;
     await quiz.save();
+    await invalidateQuizzesCache();
 
     res.status(200).json({
         success: true,
@@ -387,6 +394,7 @@ export const getQuestionById = catchAsync(async (req: Request, res: Response, ne
     if (!question) {
         return next(new ErrorHandler('Question not found in the quiz', 404));
     }
+    await invalidateQuizzesCache();
 
     // Trả về câu hỏi
     res.status(200).json({
@@ -409,6 +417,7 @@ export const getAllQuestions = catchAsync(async (req: Request, res: Response, ne
     if (!quiz) {
         return next(new ErrorHandler('Quiz not found', 404));
     }
+    await invalidateQuizzesCache();
 
     // Trả về tất cả câu hỏi trong quiz
     res.status(200).json({
@@ -433,7 +442,7 @@ export const deleteQuestion = catchAsync(async (req: Request, res: Response, nex
     const quiz = await Quiz.findById(quizId);
     if (!quiz) return next(new ErrorHandler('Quiz not found', 404));
 
-    const index = quiz.questions.findIndex((q: { questionNumber: number; }) => q.questionNumber === questionNumber);
+    const index = quiz.questions.findIndex((q: { questionNumber: number }) => q.questionNumber === questionNumber);
     if (index === -1) {
         return next(new ErrorHandler(`Question number ${questionNumber} not found`, 404));
     }
@@ -448,6 +457,7 @@ export const deleteQuestion = catchAsync(async (req: Request, res: Response, nex
     });
 
     await quiz.save();
+    await invalidateQuizzesCache();
 
     res.status(200).json({
         success: true,
@@ -513,6 +523,7 @@ export const createQuestion = catchAsync(async (req: Request, res: Response, nex
     quiz.totalQuestions = quiz.questions.length;
 
     await quiz.save();
+    await invalidateQuizzesCache();
 
     res.status(201).json({
         success: true,
