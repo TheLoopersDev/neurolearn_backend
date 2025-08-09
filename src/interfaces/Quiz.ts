@@ -1,4 +1,4 @@
-import mongoose, { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export interface IAnswerOption {
     id: string;
@@ -21,6 +21,7 @@ export interface IQuestion {
 }
 
 export interface IQuiz extends Document {
+    // Core
     name: string;
     examTitle?: string;
     duration: string;
@@ -28,22 +29,37 @@ export interface IQuiz extends Document {
     category?: string;
     progress?: number;
     totalQuestions?: number;
+
+    // Questions
     questions: IQuestion[];
-    instructorId: mongoose.Schema.Types.ObjectId;
-    courseId: mongoose.Schema.Types.ObjectId;
+
+    // Relations
+    instructorId: Types.ObjectId;
+    courseId: Types.ObjectId;
+
+    // ✅ Giải pháp B: giống Lesson
+    sectionId?: Types.ObjectId; // quiz thuộc section nào (có thể gán sau)
+    order?: number; // thứ tự trong section (lesson + quiz dùng chung)
+
+    // Meta
     description?: string;
     difficulty: 'easy' | 'medium' | 'hard';
-    passingScore: number;
-    maxAttempts: number;
+    passingScore?: number;
+    maxAttempts?: number;
     isPublished: boolean;
-    sectionOrder?: number;
-    lessonOrder?: number;
+
+    // ❌ Loại bỏ các field cũ
+    // sectionOrder?: number;
+    // lessonOrder?: number;
+
+    // Scores
     userScores: {
-        user: mongoose.Schema.Types.ObjectId;
+        user: Types.ObjectId;
         score: number;
         attemptedAt?: Date;
     }[];
+
+    // Timestamps
     createdAt?: Date;
     updatedAt?: Date;
 }
-
