@@ -19,6 +19,8 @@ import {
     updateUserRoleService,
     getAllInstructorsService
 } from '../services/user.service';
+import InviteModel from '../models/Invite.model';
+import BusinessModel from '../models/Business.model';
 
 dotenv.config();
 
@@ -182,7 +184,29 @@ export const activateUser = catchAsync(async (req: Request, res: Response, next:
     const isEmailExist = await UserModel.findOne({ email });
     if (isEmailExist) return next(new ErrorHandler('Email already exist', 400));
 
-    await UserModel.create({ name, email, password });
+    const createdUser = await UserModel.create({ name, email, password });
+    const invites = await InviteModel.find({ email, status: 'pending' });
+
+    for (const invite of invites) {
+        const business = await BusinessModel.findById(invite.businessId);
+        if (!business) continue;
+
+        // Add user vào business
+        business.employees.push({ user: createdUser._id, role: invite.role });
+        await business.save();
+
+        // Nếu muốn lưu thông tin business vào user
+        createdUser.businessInfo = {
+            businessId: business._id,
+            role: invite.role
+        };
+        await createdUser.save();
+
+        // Update invite status
+        invite.status = 'accepted';
+        invite.acceptedAt = new Date();
+        await invite.save();
+    }
 
     res.status(201).json({ success: true });
 });
@@ -236,7 +260,7 @@ export const logoutUser = catchAsync(async (req: Request, res: Response, next: N
 export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     // Try to get refresh token from cookies first
     let refresh_token = req.cookies.refresh_token as string;
-    
+
     // If not in cookies, try to get from Authorization header
     if (!refresh_token) {
         const authHeader = req.headers.authorization;
@@ -246,11 +270,11 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
             refresh_token = authHeader.substring(7);
         }
     }
-    
+
     if (!refresh_token) {
         return next(new ErrorHandler('No refresh token provided', 400));
     }
-    
+
     try {
         // First try to verify as refresh token
         let decoded;
