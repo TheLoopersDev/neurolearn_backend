@@ -203,6 +203,7 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
 import ProgressModel from '@/models/Progress.model';
+import { Types } from 'mongoose';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;

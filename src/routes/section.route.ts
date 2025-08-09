@@ -11,7 +11,10 @@ import {
     publishSection,
     unpublishSection,
     getSectionDetail,
-    getCurriculumByCourseId
+    getCurriculumByCourseId,
+    addQuizToSection,
+    reorderSection,
+    removeItemFromSection
 } from '../controllers/section.controller';
 
 const router = express.Router();
@@ -186,7 +189,7 @@ router.get('/review/:courseId', updateAccessToken, isAuthenticated, getCurriculu
  *       500:
  *         description: Internal server error
  */
-router.get('/user/:userId', updateAccessToken, isAuthenticated, getSectionsByUserId);
+router.get('/user/', updateAccessToken, isAuthenticated, getSectionsByUserId);
 
 /**
  * @swagger
@@ -325,5 +328,11 @@ router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionD
  * Lấy chi tiết 1 section
  */
 // router.get('/:sectionId', isAuthenticated, getSectionDetail);
+
+router.patch('/:id/add-quiz', updateAccessToken, isAuthenticated, addQuizToSection);
+
+router.patch('/:id/reorder', updateAccessToken, isAuthenticated, reorderSection);
+
+router.patch('/:id/remove-item', updateAccessToken, isAuthenticated, removeItemFromSection);
 
 export default router;

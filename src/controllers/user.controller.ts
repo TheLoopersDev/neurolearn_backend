@@ -22,6 +22,9 @@ import {
 import ProgressModel from '@/models/Progress.model';
 import CourseModel from '@/models/Course.model';
 import QuizModel from '@/models/Quiz.model';
+import LessonModel from '@/models/Lesson.model';
+import mongoose, { Types } from 'mongoose';
+import { getLatestCourse } from '@/services/course.service';
 
 dotenv.config();
 
@@ -640,112 +643,260 @@ export const getInstructorsWithSort = catchAsync(async (req: Request, res: Respo
     });
 });
 
-export const getUserDashboardData = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { userId } = req.params;
+// ============================
+// Helpers
+// ============================
 
-        // 1️⃣ Lấy thông tin user (để lấy danh sách purchasedCourses)
-        const user = (await UserModel.findById(userId)
-            .populate('purchasedCourses')
-            .populate('uploadedCourses')
-            .lean()) as unknown as {
-            _id: string;
-            purchasedCourses: any[];
-            uploadedCourses: any[];
-        } | null;
+type Exam = { name: string; duration: number };
 
-        if (!user) return res.status(404).json({ message: 'User not found' });
+type CourseEntry = {
+    courseId: string;
+    courseName: string;
+    thumbnail: string;
+    exams: Exam[];
+};
 
-        // 2️⃣ Thống kê stats
-        const totalCourses = user.purchasedCourses?.length || 0;
-        const completedCourses = await ProgressModel.countDocuments({
-            user: userId,
-            progressPercentage: 100
-        });
+// Gom quiz theo course để UI dễ hiển thị
+function groupQuizzesByCourse(quizzes: any[]) {
+    const map = new Map<string, CourseEntry>();
 
-        const certificates = completedCourses; // giả sử cấp chứng chỉ khi hoàn thành
+    for (const q of quizzes) {
+        const courseId = String(q.courseId?._id || q.courseId);
 
-        const totalHoursSpent = await ProgressModel.aggregate([
-            { $match: { user: user._id } },
-            {
-                $group: {
-                    _id: null,
-                    totalHours: { $sum: '$totalCompleted' } // hoặc trường riêng nếu có log giờ học
-                }
-            }
-        ]);
-
-        const stats = {
-            totalCourses,
-            completedCourses,
-            certificates,
-            hoursSpent: totalHoursSpent[0]?.totalHours ?? 0
+        // ✅ Khai báo kiểu rõ ràng khi khởi tạo entry
+        const entry: CourseEntry = map.get(courseId) ?? {
+            courseId,
+            courseName: (q.courseId as any)?.name || '',
+            thumbnail: (q.courseId as any)?.thumbnail?.url || '',
+            exams: []
         };
 
-        // 3️⃣ Lấy latest course (theo ngày tạo mới nhất trong purchasedCourses)
-        const latestCourse = await CourseModel.findOne({
-            _id: { $in: user.purchasedCourses }
-        })
-            .sort({ createdAt: -1 })
-            .populate('authorId', 'name avatar profession')
-            .lean();
+        entry.exams.push({
+            name: String(q.name),
+            duration: Number(q.duration) || 0
+        });
 
-        // 4️⃣ Related courses (toàn bộ purchasedCourses)
-        const relatedCourses = user.purchasedCourses || [];
+        map.set(courseId, entry);
+    }
 
-        // 5️⃣ Thống kê student chart (view / buy)
-        const studentStats = await ProgressModel.aggregate([
-            { $match: { user: user._id } },
-            {
-                $lookup: {
-                    from: 'courses',
-                    localField: 'course',
-                    foreignField: '_id',
-                    as: 'course'
-                }
-            },
-            { $unwind: '$course' },
-            {
-                $project: {
-                    name: '$course.name',
-                    buy: '$totalCompleted',
-                    view: '$totalLessons'
-                }
+    return Array.from(map.values()).slice(0, 5);
+}
+
+// Tính giờ học từ các lesson đã hoàn thành (videoLength = giây)
+async function computeHoursSpentFromProgress(userId: string) {
+    const progresses = await ProgressModel.find({ user: userId }, 'completedSections').lean();
+
+    const completedLessonIds = new Set<string>();
+    for (const p of progresses) {
+        for (const sec of p?.completedSections || []) {
+            for (const l of sec?.lessons || []) {
+                if (l?.isCompleted && l?.lessonId) completedLessonIds.add(String(l.lessonId));
             }
-        ]);
+        }
+    }
 
-        // 6️⃣ Upcoming Exams: Quiz liên kết với purchasedCourses và chưa làm xong
-        const upcomingExams = await QuizModel.find({
-            courseId: { $in: user.purchasedCourses },
-            isPublished: true
+    if (!completedLessonIds.size) return 0;
+
+    const lessons = await LessonModel.find({ _id: { $in: Array.from(completedLessonIds) } }, { videoLength: 1 }).lean();
+
+    const totalSeconds = lessons.reduce((sum, l) => sum + (Number(l.videoLength) || 0), 0);
+    return Math.round((totalSeconds / 3600) * 10) / 10; // giờ, 1 số lẻ
+}
+
+// Tạo map progress theo course để tra nhanh
+async function getProgressByCourseMap(userId: string) {
+    const progressList = await ProgressModel.find(
+        { user: userId },
+        { course: 1, progressPercentage: 1, completedSections: 1 }
+    ).lean();
+
+    const map = new Map<string, any>();
+    for (const p of progressList) map.set(String(p.course), p);
+    return map;
+}
+
+// ============================
+// Controller: GET /users/dashboard/:userId
+// ============================
+export const getUserDashboardData = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.params.userId;
+    if (!userId) {
+        return next(new ErrorHandler('Please provide a user id', 400));
+    }
+
+    // Bảo mật: chỉ cho xem chính mình
+    if (!req.user || String(req.user._id) !== String(userId)) {
+        return next(new ErrorHandler('Forbidden', 403));
+    }
+
+    // 1) Lấy thông tin user + danh sách khoá đã mua (purchasedCourses)
+    type UserPick = { purchasedCourses?: any[]; uploadedCourses?: any[] };
+
+    const user = await UserModel.findById(userId, { purchasedCourses: 1, uploadedCourses: 1 }).lean<UserPick | null>();
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const purchasedCourseIds = (user.purchasedCourses ?? []).map(String);
+
+    // 2) Thống kê cơ bản
+    const totalCourses = purchasedCourseIds.length;
+    const completedCourses = await ProgressModel.countDocuments({ user: userId, progressPercentage: 100 });
+    const certificates = completedCourses; // giả định: hoàn thành = có chứng chỉ
+    const hoursSpent = await computeHoursSpentFromProgress(userId);
+
+    const stats = { totalCourses, completedCourses, certificates, hoursSpent };
+
+    // 3) Lấy khoá vừa học gần nhất
+    let latestCoursePayload: any = null;
+    if (purchasedCourseIds.length) {
+        latestCoursePayload = await getLatestCourse(userId);
+    }
+    // 6) Related courses: khóa CHƯA mua nhưng cùng category/subCategory với khóa đang học
+    let relatedCourses: any[] = [];
+
+    if (purchasedCourseIds.length) {
+        const purchasedCourses = await CourseModel.find(
+            { _id: { $in: purchasedCourseIds } },
+            { category: 1, subCategory: 1 }
+        ).lean();
+
+        const categoryIds = [
+            ...new Set(purchasedCourses.map((c) => (c.category ? String(c.category) : null)).filter(Boolean))
+        ];
+        const subCategoryIds = [
+            ...new Set(purchasedCourses.map((c) => (c.subCategory ? String(c.subCategory) : null)).filter(Boolean))
+        ];
+
+        const courses = await CourseModel.find({
+            _id: { $nin: purchasedCourseIds },
+            isPublished: true,
+            $or: [
+                ...(categoryIds.length ? [{ category: { $in: categoryIds } }] : []),
+                ...(subCategoryIds.length ? [{ subCategory: { $in: subCategoryIds } }] : [])
+            ]
         })
+            .populate('authorId', 'name email avatar profession description')
+            .populate('level', 'name')
+            .populate({
+                path: 'category',
+                select: 'name',
+                match: categoryIds.length > 0 ? { _id: { $in: categoryIds } } : null, // Chỉ populate nếu có categoryIds
+                strictPopulate: false
+            })
+            .populate({
+                path: 'subCategory',
+                select: 'name',
+                match: subCategoryIds.length > 0 ? { _id: { $in: subCategoryIds } } : null, // Chỉ populate nếu có subCategoryIds
+                strictPopulate: false
+            })
+            .populate({
+                path: 'sections',
+                match: { isPublished: true },
+                select: 'title lessons',
+                populate: {
+                    path: 'lessons',
+                    match: { isPublished: true },
+                    select: 'title duration'
+                }
+            })
             .sort({ createdAt: -1 })
             .limit(5)
+            .lean();
+
+        relatedCourses = courses.map((c) => {
+            const totalSections = c.sections?.length || 0;
+            const totalLessons =
+                c.sections?.reduce((sum: number, sec: any) => sum + (sec.lessons?.length || 0), 0) || 0;
+            const durationInHours = ((c.duration || 0) / 60).toFixed(1);
+
+            return {
+                _id: c._id,
+                name: c.name,
+                subTitle: c.subTitle,
+                description: c.description,
+                thumbnail: c.thumbnail,
+                demoUrl: c.demoUrl,
+                price: c.price,
+                estimatedPrice: c.estimatedPrice,
+                isFree: c.isFree,
+                purchased: c.purchased ?? 0,
+                level: c.level?.name ?? null,
+                rating: c.rating ?? 0,
+                category: c.category || null,
+                subCategory: c.subCategory || null,
+                overview: c.overview || '',
+                topics: Array.isArray(c.topics) ? c.topics : [],
+                totalSections,
+                totalLessons,
+                duration: `${durationInHours} hours`,
+                publisher: {
+                    name: c.authorId?.name || '',
+                    avatar: c.authorId?.avatar || '',
+                    email: c.authorId?.email || '',
+                    profession: c.authorId?.profession || '',
+                    description: c.authorId?.description || ''
+                }
+            };
+        });
+    }
+
+    // 7) Student stats cho chart (User)
+    const studentStats = await ProgressModel.aggregate([
+        { $match: { user: new mongoose.Types.ObjectId(userId) } },
+        {
+            $lookup: {
+                from: 'courses',
+                localField: 'course',
+                foreignField: '_id',
+                as: 'course',
+                pipeline: [{ $project: { name: 1 } }]
+            }
+        },
+        { $unwind: '$course' },
+        {
+            $project: {
+                _id: 0,
+                name: '$course.name',
+                // fallback mới cho UI:
+                progress: '$progressPercentage',
+                // giữ field cũ nếu sau này bạn tính được:
+                completed: '$totalCompleted',
+                hours: '$totalHours'
+            }
+        }
+    ]);
+
+    // 8) Upcoming exams: gom theo course, lấy nhiều quiz rồi group
+    let upcomingExams: any[] = [];
+    if (purchasedCourseIds.length) {
+        const quizzes = await QuizModel.find(
+            { courseId: { $in: purchasedCourseIds }, isPublished: true },
+            { name: 1, duration: 1, courseId: 1, createdAt: 1 }
+        )
+            .sort({ createdAt: -1 })
+            .limit(30)
             .populate('courseId', 'name thumbnail.url')
             .lean();
 
-        // Chuẩn hóa dữ liệu UpcomingExam cho UI
-        const examsForUI = upcomingExams.map((exam) => ({
-            courseName: (exam.courseId as any)?.name,
-            thumbnail: (exam.courseId as any)?.thumbnail?.url,
-            exams: [
-                {
-                    name: exam.name,
-                    duration: exam.duration
-                }
-            ]
-        }));
-
-        // 7️⃣ Trả về toàn bộ dashboard data
-        return res.json({
-            stats,
-            latestCourse,
-            relatedCourses,
-            studentStats,
-            upcomingExams: examsForUI
-        });
-    } catch (error) {
-        console.error('getUserDashboardData error:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        upcomingExams = groupQuizzesByCourse(quizzes);
     }
+
+    // 9) Trả về
+    return res.status(200).json({
+        success: true,
+        stats,
+        latestCourse: latestCoursePayload,
+        relatedCourses,
+        studentStats,
+        upcomingExams
+    });
+});
+
+export const getUserPurchasedCoursesMobile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !req.user._id) {
+        return next(new ErrorHandler('User not authenticated', 500));
+    }
+
+    const userId = req.user._id.toString();
+    getUserById(userId, res);
 });
