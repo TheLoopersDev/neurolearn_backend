@@ -10,7 +10,6 @@ import {
     getAllCourses,
     getAllCoursesWithoutPurchase,
     getCoursesLimitWithPagination,
-    getPurchasedCourseByUser,
     getSingleCourse,
     getTopCourses,
     updateCourse,
@@ -43,6 +42,7 @@ import {
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
+import { get } from 'http';
 
 /**
  * @swagger
@@ -163,7 +163,7 @@ router.get('/top-courses', getTopCourses);
  *       404:
  *         description: Course not found
  */
-router.get('/course-data/:id', getSingleCourseFullDetail);
+router.get('/course-data/:id', isAuthenticated, updateAccessToken, getSingleCourseFullDetail);
 
 /**
  * @swagger
@@ -266,6 +266,7 @@ router.get('/:id/is-purchased', isAuthenticated, updateAccessToken, checkCourseP
  *         description: Not authenticated
  */
 router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPurchasedCoursesOfUser);
+// router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
 
 /**
  * @swagger
@@ -289,7 +290,6 @@ router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPur
  *       404:
  *         description: Course not found
  */
-router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
 
 /**
  * @swagger

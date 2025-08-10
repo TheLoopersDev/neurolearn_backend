@@ -21,7 +21,9 @@ import {
     refreshToken,
     updateUserSocialLinks,
     getUser,
-    getTopInstructors
+    getTopInstructors,
+    getUserDashboardData,
+    getUserPurchasedCoursesMobile
 } from '../controllers/user.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
@@ -604,5 +606,55 @@ router.put('/update-role', isAuthenticated, authorizeRoles('admin'), updateUserR
  *         description: User not found
  */
 router.delete('/delete-user:id', isAuthenticated, authorizeRoles('admin'), deleteUser);
+
+/**
+ * @swagger
+ * /api/users/dashboard/{userId}:
+ *   get:
+ *     summary: Get all dashboard data for a user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           description: User ID
+ *     responses:
+ *       200:
+ *         description: User dashboard data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 stats:
+ *                   type: object
+ *                   description: Thống kê tổng quan
+ *                 latestCourse:
+ *                   type: object
+ *                   description: Khóa học gần nhất
+ *                 relatedCourses:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 studentStats:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 upcomingExams:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: User not found
+ */
+router.get('/dashboard/:userId', updateAccessToken, isAuthenticated, getUserDashboardData);
+
+router.get('/purchase-course-mobile', getUserPurchasedCoursesMobile);
 
 export = router;

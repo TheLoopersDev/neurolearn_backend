@@ -43,4 +43,40 @@ const DiscountSchema = new Schema<IDiscount>(
     { timestamps: true }
 );
 
+// Pre-save middleware to handle empty string values for ObjectId fields
+DiscountSchema.pre('save', function(next) {
+    // Handle empty string businessId - this will be handled at controller level
+    // The middleware here is just for safety
+    
+    // Handle empty strings in arrays - this will be handled at controller level
+    // The middleware here is just for safety
+    
+    next();
+});
+
+// Pre-update middleware to handle empty string values for ObjectId fields
+DiscountSchema.pre('findOneAndUpdate', function(next) {
+    const update = this.getUpdate() as any;
+    
+    // Handle empty string businessId
+    if (update && update.businessId === '') {
+        update.businessId = undefined;
+    }
+    
+    // Handle empty strings in arrays
+    if (update && update.courseIds && Array.isArray(update.courseIds)) {
+        update.courseIds = update.courseIds.filter((id: any) => id && id !== '');
+    }
+    
+    if (update && update.allowedUsers && Array.isArray(update.allowedUsers)) {
+        update.allowedUsers = update.allowedUsers.filter((id: any) => id && id !== '');
+    }
+    
+    if (update && update.allowedBusinesses && Array.isArray(update.allowedBusinesses)) {
+        update.allowedBusinesses = update.allowedBusinesses.filter((id: any) => id && id !== '');
+    }
+    
+    next();
+});
+
 export default mongoose.model<IDiscount>('Discount', DiscountSchema);

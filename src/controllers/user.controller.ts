@@ -21,6 +21,13 @@ import {
 } from '../services/user.service';
 import InviteModel from '../models/Invite.model';
 import BusinessModel from '../models/Business.model';
+import ProgressModel from '@/models/Progress.model';
+import CourseModel from '@/models/Course.model';
+import QuizModel from '@/models/Quiz.model';
+import LessonModel from '@/models/Lesson.model';
+import mongoose, { Types } from 'mongoose';
+import { getLatestCourse } from '@/services/course.service';
+
 
 dotenv.config();
 
@@ -317,93 +324,6 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
         return next(new ErrorHandler('Invalid refresh token', 401));
     }
 });
-// export const updateAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-//     console.log('--- updateAccessToken Middleware Start ---');
-//     console.log('Cookies received by Express:', req.cookies); // Log ALL cookies
-
-//     try {
-//         const accessToken = req.cookies.access_token;
-//         const refreshToken = req.cookies.refresh_token;
-
-//         console.log('accessToken:', accessToken);
-//         console.log('refreshToken:', refreshToken);
-
-//         // 1. Check Access Token (Optional, but good for debugging)
-//         if (accessToken) {
-//             try {
-//                 const decodedAccessToken = jwt.verify(accessToken, process.env.ACCESS_TOKEN!) as { id: string };
-//                 console.log('Decoded Access Token:', decodedAccessToken);
-//                 // If access token is valid, you *could* just proceed.
-//                 // However, for consistent refresh logic, it's common to *always* refresh.
-//                 // req.user = decodedAccessToken; // You might set req.user here
-//                 // return next(); // You could return early here
-//             } catch (accessError) {
-//                 console.error('Access Token Verification Error:', accessError);
-//                 // Access token is invalid or expired.  Proceed to refresh logic.
-//             }
-//         }
-
-//         // 2. Refresh Token Verification (Required)
-//         if (!refreshToken) {
-//             console.log('No refresh token provided.');
-//             console.log('--- updateAccessToken Middleware End (No Refresh Token) ---');
-//             return res.status(400).json({ message: 'No refresh token provided' }); // 400 Bad Request
-//         }
-
-//         let decodedRefreshToken;
-//         try {
-//             decodedRefreshToken = jwt.verify(refreshToken, process.env.REFRESH_TOKEN!) as { id: string };
-//             console.log('Decoded Refresh Token:', decodedRefreshToken);
-//         } catch (refreshError) {
-//             console.error('Refresh Token Verification Error:', refreshError);
-//             console.log('--- updateAccessToken Middleware End (Invalid Refresh Token) ---');
-//             return res.status(401).json({ message: 'Invalid refresh token' }); // 401 Unauthorized
-//         }
-
-//         // 3. Redis Check (If you are using Redis)
-//         if (redis) {
-//             // Check if redisClient is defined
-//             try {
-//                 const session = await redis.get(`user:${decodedRefreshToken.id}`);
-//                 console.log('Redis Session Data:', session);
-
-//                 if (!session) {
-//                     console.log('No session found in Redis.');
-//                     console.log('--- updateAccessToken Middleware End (No Session) ---');
-//                     return res.status(401).json({ message: 'Session expired' }); // Or a 400, depending on your preference
-//                 }
-
-//                 // Optionally, parse the session data if it's stored as JSON
-//                 // const userData = JSON.parse(session) as IUser;
-//                 // req.user = userData;
-//             } catch (redisError) {
-//                 console.error('Redis Error:', redisError);
-//                 console.log('--- updateAccessToken Middleware End (Redis Error) ---');
-//                 return res.status(500).json({ message: 'Internal server error (Redis)' });
-//             }
-//         } else {
-//             console.log('Redis client is not initialized.'); // Add this log
-//             // Handle the case where Redis is not being used.  You might have a fallback mechanism.
-//         }
-//         // 4. Generate New Access Token (If refresh token is valid and session exists)
-//         const newAccessToken = jwt.sign({ id: decodedRefreshToken.id }, process.env.ACCESS_TOKEN!, { expiresIn: '1m' }); // Keep it short!
-//         console.log('New Access Token Generated:', newAccessToken);
-
-//         // 5. Set New Access Token Cookie
-//         res.cookie('access_token', newAccessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-
-//         // 6. Attach User to Request (Optional, but common)
-//         // If you have user data, you can attach it to the request object.
-//         // req.user = { id: decodedRefreshToken.id }; // Or the full user object from Redis/DB
-
-//         console.log('--- updateAccessToken Middleware End (Success) ---');
-//         next();
-//     } catch (error) {
-//         console.error('Unexpected Error in updateAccessToken:', error);
-//         console.log('--- updateAccessToken Middleware End (Unexpected Error) ---');
-//         return res.status(500).json({ message: 'Internal server error' });
-//     }
-// });
 
 export const refreshToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const refresh_token = req.cookies.refresh_token as string;
@@ -746,4 +666,262 @@ export const getInstructorsWithSort = catchAsync(async (req: Request, res: Respo
         success: true,
         instructors: users
     });
+});
+
+// ============================
+// Helpers
+// ============================
+
+type Exam = { name: string; duration: number };
+
+type CourseEntry = {
+    courseId: string;
+    courseName: string;
+    thumbnail: string;
+    exams: Exam[];
+};
+
+// Gom quiz theo course để UI dễ hiển thị
+function groupQuizzesByCourse(quizzes: any[]) {
+    const map = new Map<string, CourseEntry>();
+
+    for (const q of quizzes) {
+        const courseId = String(q.courseId?._id || q.courseId);
+
+        // ✅ Khai báo kiểu rõ ràng khi khởi tạo entry
+        const entry: CourseEntry = map.get(courseId) ?? {
+            courseId,
+            courseName: (q.courseId as any)?.name || '',
+            thumbnail: (q.courseId as any)?.thumbnail?.url || '',
+            exams: []
+        };
+
+        entry.exams.push({
+            name: String(q.name),
+            duration: Number(q.duration) || 0
+        });
+
+        map.set(courseId, entry);
+    }
+
+    return Array.from(map.values()).slice(0, 5);
+}
+
+// Tính giờ học từ các lesson đã hoàn thành (videoLength = giây)
+async function computeHoursSpentFromProgress(userId: string) {
+    const progresses = await ProgressModel.find({ user: userId }, 'completedSections').lean();
+
+    const completedLessonIds = new Set<string>();
+    for (const p of progresses) {
+        for (const sec of p?.completedSections || []) {
+            for (const l of sec?.lessons || []) {
+                if (l?.isCompleted && l?.lessonId) completedLessonIds.add(String(l.lessonId));
+            }
+        }
+    }
+
+    if (!completedLessonIds.size) return 0;
+
+    const lessons = await LessonModel.find({ _id: { $in: Array.from(completedLessonIds) } }, { videoLength: 1 }).lean();
+
+    const totalSeconds = lessons.reduce((sum, l) => sum + (Number(l.videoLength) || 0), 0);
+    return Math.round((totalSeconds / 3600) * 10) / 10; // giờ, 1 số lẻ
+}
+
+// Tạo map progress theo course để tra nhanh
+async function getProgressByCourseMap(userId: string) {
+    const progressList = await ProgressModel.find(
+        { user: userId },
+        { course: 1, progressPercentage: 1, completedSections: 1 }
+    ).lean();
+
+    const map = new Map<string, any>();
+    for (const p of progressList) map.set(String(p.course), p);
+    return map;
+}
+
+// ============================
+// Controller: GET /users/dashboard/:userId
+// ============================
+export const getUserDashboardData = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.params.userId;
+    if (!userId) {
+        return next(new ErrorHandler('Please provide a user id', 400));
+    }
+
+    // Bảo mật: chỉ cho xem chính mình
+    if (!req.user || String(req.user._id) !== String(userId)) {
+        return next(new ErrorHandler('Forbidden', 403));
+    }
+
+    // 1) Lấy thông tin user + danh sách khoá đã mua (purchasedCourses)
+    type UserPick = { purchasedCourses?: any[]; uploadedCourses?: any[] };
+
+    const user = await UserModel.findById(userId, { purchasedCourses: 1, uploadedCourses: 1 }).lean<UserPick | null>();
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const purchasedCourseIds = (user.purchasedCourses ?? []).map(String);
+
+    // 2) Thống kê cơ bản
+    const totalCourses = purchasedCourseIds.length;
+    const completedCourses = await ProgressModel.countDocuments({ user: userId, progressPercentage: 100 });
+    const certificates = completedCourses; // giả định: hoàn thành = có chứng chỉ
+    const hoursSpent = await computeHoursSpentFromProgress(userId);
+
+    const stats = { totalCourses, completedCourses, certificates, hoursSpent };
+
+    // 3) Lấy khoá vừa học gần nhất
+    let latestCoursePayload: any = null;
+    if (purchasedCourseIds.length) {
+        latestCoursePayload = await getLatestCourse(userId);
+    }
+    // 6) Related courses: khóa CHƯA mua nhưng cùng category/subCategory với khóa đang học
+    let relatedCourses: any[] = [];
+
+    if (purchasedCourseIds.length) {
+        const purchasedCourses = await CourseModel.find(
+            { _id: { $in: purchasedCourseIds } },
+            { category: 1, subCategory: 1 }
+        ).lean();
+
+        const categoryIds = [
+            ...new Set(purchasedCourses.map((c) => (c.category ? String(c.category) : null)).filter(Boolean))
+        ];
+        const subCategoryIds = [
+            ...new Set(purchasedCourses.map((c) => (c.subCategory ? String(c.subCategory) : null)).filter(Boolean))
+        ];
+
+        const courses = await CourseModel.find({
+            _id: { $nin: purchasedCourseIds },
+            isPublished: true,
+            $or: [
+                ...(categoryIds.length ? [{ category: { $in: categoryIds } }] : []),
+                ...(subCategoryIds.length ? [{ subCategory: { $in: subCategoryIds } }] : [])
+            ]
+        })
+            .populate('authorId', 'name email avatar profession description')
+            .populate('level', 'name')
+            .populate({
+                path: 'category',
+                select: 'name',
+                match: categoryIds.length > 0 ? { _id: { $in: categoryIds } } : null, // Chỉ populate nếu có categoryIds
+                strictPopulate: false
+            })
+            .populate({
+                path: 'subCategory',
+                select: 'name',
+                match: subCategoryIds.length > 0 ? { _id: { $in: subCategoryIds } } : null, // Chỉ populate nếu có subCategoryIds
+                strictPopulate: false
+            })
+            .populate({
+                path: 'sections',
+                match: { isPublished: true },
+                select: 'title lessons',
+                populate: {
+                    path: 'lessons',
+                    match: { isPublished: true },
+                    select: 'title duration'
+                }
+            })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .lean();
+
+        relatedCourses = courses.map((c) => {
+            const totalSections = c.sections?.length || 0;
+            const totalLessons =
+                c.sections?.reduce((sum: number, sec: any) => sum + (sec.lessons?.length || 0), 0) || 0;
+            const durationInHours = ((c.duration || 0) / 60).toFixed(1);
+
+            return {
+                _id: c._id,
+                name: c.name,
+                subTitle: c.subTitle,
+                description: c.description,
+                thumbnail: c.thumbnail,
+                demoUrl: c.demoUrl,
+                price: c.price,
+                estimatedPrice: c.estimatedPrice,
+                isFree: c.isFree,
+                purchased: c.purchased ?? 0,
+                level: c.level?.name ?? null,
+                rating: c.rating ?? 0,
+                category: c.category || null,
+                subCategory: c.subCategory || null,
+                overview: c.overview || '',
+                topics: Array.isArray(c.topics) ? c.topics : [],
+                totalSections,
+                totalLessons,
+                duration: `${durationInHours} hours`,
+                publisher: {
+                    name: c.authorId?.name || '',
+                    avatar: c.authorId?.avatar || '',
+                    email: c.authorId?.email || '',
+                    profession: c.authorId?.profession || '',
+                    description: c.authorId?.description || ''
+                }
+            };
+        });
+    }
+
+    // 7) Student stats cho chart (User)
+    const studentStats = await ProgressModel.aggregate([
+        { $match: { user: new mongoose.Types.ObjectId(userId) } },
+        {
+            $lookup: {
+                from: 'courses',
+                localField: 'course',
+                foreignField: '_id',
+                as: 'course',
+                pipeline: [{ $project: { name: 1 } }]
+            }
+        },
+        { $unwind: '$course' },
+        {
+            $project: {
+                _id: 0,
+                name: '$course.name',
+                // fallback mới cho UI:
+                progress: '$progressPercentage',
+                // giữ field cũ nếu sau này bạn tính được:
+                completed: '$totalCompleted',
+                hours: '$totalHours'
+            }
+        }
+    ]);
+
+    // 8) Upcoming exams: gom theo course, lấy nhiều quiz rồi group
+    let upcomingExams: any[] = [];
+    if (purchasedCourseIds.length) {
+        const quizzes = await QuizModel.find(
+            { courseId: { $in: purchasedCourseIds }, isPublished: true },
+            { name: 1, duration: 1, courseId: 1, createdAt: 1 }
+        )
+            .sort({ createdAt: -1 })
+            .limit(30)
+            .populate('courseId', 'name thumbnail.url')
+            .lean();
+
+        upcomingExams = groupQuizzesByCourse(quizzes);
+    }
+
+    // 9) Trả về
+    return res.status(200).json({
+        success: true,
+        stats,
+        latestCourse: latestCoursePayload,
+        relatedCourses,
+        studentStats,
+        upcomingExams
+    });
+});
+
+export const getUserPurchasedCoursesMobile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !req.user._id) {
+        return next(new ErrorHandler('User not authenticated', 500));
+    }
+
+    const userId = req.user._id.toString();
+    getUserById(userId, res);
 });

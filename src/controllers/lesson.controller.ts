@@ -136,21 +136,30 @@ export const updateLesson = catchAsync(async (req: Request, res: Response, next:
 // Delete lesson
 export const deleteLesson = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const lessonId = req.params.lessonId;
+
+    // Kiểm tra xem lessonId có được truyền vào không
     if (!lessonId) {
         return next(new ErrorHandler('Lesson ID is required', 400));
     }
-    const lesson = await LessonModel.findById(lessonId);
-    if (!lesson) return next(new ErrorHandler('Lesson not found', 404));
 
-    // Xóa lessonId khỏi section.lessons nếu có
-    const section = await SectionModel.findById(lesson.sectionId);
-    if (section) {
-        section.lessons = section.lessons.filter((id: any) => id.toString() !== lessonId);
-        await section.save();
+    // Tìm lesson trong bảng Lesson
+    const lesson = await LessonModel.findById(lessonId);
+    if (!lesson) {
+        return next(new ErrorHandler('Lesson not found', 404));
     }
 
+    // Tìm section chứa lesson
+    const section = await SectionModel.findById(lesson.sectionId);
+    if (section) {
+        // Loại bỏ lessonId khỏi mảng lessons trong section
+        section.lessons = section.lessons.filter((id: any) => id.toString() !== lessonId);
+        await section.save(); // Lưu lại sự thay đổi trong section
+    }
+
+    // Xóa lesson khỏi bảng Lesson
     await lesson.deleteOne();
 
+    // Trả về thông báo thành công
     res.status(200).json({
         success: true,
         message: 'Lesson deleted successfully'
