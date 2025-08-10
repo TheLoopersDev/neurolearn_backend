@@ -202,7 +202,7 @@ export const unpublishCourse = catchAsync(async (req: Request, res: Response, ne
 // get single course without purchase
 import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
-import ProgressModel from '@/models/Progress.model';
+import ProgressModel from '../models/Progress.model';
 import { Types } from 'mongoose';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

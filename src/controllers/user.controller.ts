@@ -21,12 +21,12 @@ import {
 } from '../services/user.service';
 import InviteModel from '../models/Invite.model';
 import BusinessModel from '../models/Business.model';
-import ProgressModel from '@/models/Progress.model';
-import CourseModel from '@/models/Course.model';
-import QuizModel from '@/models/Quiz.model';
-import LessonModel from '@/models/Lesson.model';
+import ProgressModel from '../models/Progress.model';
+import CourseModel from '../models/Course.model';
+import QuizModel from '../models/Quiz.model';
+import LessonModel from '../models/Lesson.model';
 import mongoose, { Types } from 'mongoose';
-import { getLatestCourse } from '@/services/course.service';
+import { getLatestCourse } from '../services/course.service';
 
 
 dotenv.config();
