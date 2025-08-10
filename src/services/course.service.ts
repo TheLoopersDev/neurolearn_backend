@@ -1,11 +1,11 @@
-import ProgressModel from '@/models/Progress.model';
+import ProgressModel from '../models/Progress.model';
 import CourseModel from '../models/Course.model';
 import UserModel from '../models/User.model';
 import ErrorHandler from '../utils/ErrorHandler';
 import { redis } from '../utils/redis';
 import { NextFunction, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import SectionModel from '@/models/Section.model';
+import SectionModel from '../models/Section.model';
 
 export const createCourse = async (data: any, req: Request, res: Response, next: NextFunction) => {
     const user = await UserModel.findById(req.user?._id);

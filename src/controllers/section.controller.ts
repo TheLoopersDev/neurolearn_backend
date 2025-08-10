@@ -5,8 +5,8 @@ import { redis } from '../utils/redis';
 import ErrorHandler from '../utils/ErrorHandler';
 import { catchAsync } from '../utils/catchAsync';
 import mongoose, { Types } from 'mongoose';
-import QuizModel from '@/models/Quiz.model';
-import LessonModel from '@/models/Lesson.model';
+import QuizModel from '../models/Quiz.model';
+import LessonModel from '../models/Lesson.model';
 import { invalidateQuizzesCache } from './quiz.controller';
 
 export const createSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
