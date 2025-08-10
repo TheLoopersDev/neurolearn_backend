@@ -6,11 +6,12 @@ import {
     updateDiscount,
     deleteDiscount,
     validateDiscountCode,
-    getDiscountStatistics
+    getDiscountStatistics,
+    getAvailableDiscounts
 } from '../controllers/discount.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
-
+import { updateAccessToken } from '../controllers/user.controller';
 
 const router = express.Router();
 
@@ -20,6 +21,56 @@ const router = express.Router();
  *   name: Discount
  *   description: Discount management APIs
  */
+
+/**
+ * @swagger
+ * /api/discount/available:
+ *   get:
+ *     summary: Lấy danh sách mã giảm giá khả dụng
+ *     description: |
+ *       API này trả về danh sách các mã giảm giá mà người dùng hiện tại có thể sử dụng.
+ *       Bao gồm:
+ *         - Mã giảm giá công khai (`accessType: public`)
+ *         - Mã giảm giá private nhưng user hoặc business của user được phép (`allowedUsers` hoặc `allowedBusinesses` chứa ID của user/business)
+ *     tags:
+ *       - Discount
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sách mã giảm giá lấy thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 discounts:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Discount'
+ *       400:
+ *         description: Thiếu userId hoặc businessId
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Missing userId or businessId
+ *       401:
+ *         description: Chưa xác thực hoặc token không hợp lệ
+ *       500:
+ *         description: Lỗi server
+ */
+
+router.get('/available', updateAccessToken, isAuthenticated, getAvailableDiscounts);
 
 /**
  * @swagger
@@ -152,12 +203,7 @@ const router = express.Router();
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.post(
-    '/',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    createDiscount
-);
+router.post('/', isAuthenticated, authorizeRoles('admin'), createDiscount);
 
 /**
  * @swagger
@@ -265,12 +311,7 @@ router.post(
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.get(
-    '/',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    getAllDiscounts
-);
+router.get('/', isAuthenticated, authorizeRoles('admin'), getAllDiscounts);
 
 /**
  * @swagger
@@ -352,12 +393,7 @@ router.get(
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.get(
-    '/:id',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    getDiscountById
-);
+router.get('/:id', isAuthenticated, authorizeRoles('admin'), getDiscountById);
 
 /**
  * @swagger
@@ -453,12 +489,7 @@ router.get(
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.put(
-    '/:id',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    updateDiscount
-);
+router.put('/:id', isAuthenticated, authorizeRoles('admin'), updateDiscount);
 
 /**
  * @swagger
@@ -498,12 +529,7 @@ router.put(
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.delete(
-    '/:id',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    deleteDiscount
-);
+router.delete('/:id', isAuthenticated, authorizeRoles('admin'), deleteDiscount);
 
 /**
  * @swagger
@@ -657,11 +683,6 @@ router.post('/validate', validateDiscountCode);
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.get(
-    '/statistics',
-    isAuthenticated,
-    authorizeRoles('admin'),
-    getDiscountStatistics
-);
+router.get('/statistics', isAuthenticated, authorizeRoles('admin'), getDiscountStatistics);
 
 export default router;

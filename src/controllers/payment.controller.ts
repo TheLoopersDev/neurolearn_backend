@@ -193,7 +193,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
                 } else {
                     await DiscountModel.create({
                         code: discountCode,
-                        name: `Voucher ${discountPercent}% for you`,
+                        name: `Voucher 10% for you`,
                         description: `Voucher for purchasing course from Academix`,
                         discountType: 'percentage',
                         amount: 10,
