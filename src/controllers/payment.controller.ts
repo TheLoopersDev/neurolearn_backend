@@ -7,8 +7,8 @@ import CourseModel from '../models/Course.model';
 import BusinessModel from '../models/Business.model';
 import RevenueModel from '../models/Revenue.model';
 import UserModel from '../models/User.model';
-import { validateAndCalculateDiscount } from '../services/discount.service';
 import DiscountModel from '../models/Discount.model';
+import sendMail from '../utils/sendMail';
 
 dotenv.config();
 
@@ -32,21 +32,21 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             return;
         }
 
+        const userType = req.user?.businessInfo?.role === 'admin' ? 'business' : 'user';
         const orderCode = Math.floor(Math.random() * 1_000_000);
+
+        const returnUrl =
+            userType === 'business'
+                ? `${clientUrl}/business/dashboard/purchase-history/${orderCode}`
+                : `${clientUrl}/dashboard/purchase-history/${orderCode}`;
 
         const paymentLinkRes = await payos.createPaymentLink({
             orderCode,
-            amount, // FE đã gửi giá sau giảm
+            amount,
             description,
-            returnUrl: `${clientUrl}/dashboard/purchase-history/${orderCode}`,
-            cancelUrl: `${clientUrl}`,
-            extraData: JSON.stringify({ userId, courseIds })
+            returnUrl,
+            cancelUrl: `${clientUrl}`
         } as any);
-
-        const userType =
-            req.user?.businessInfo?.role === 'admin' || req.user?.businessInfo?.role === 'manager'
-                ? 'business'
-                : 'user';
 
         await Order.create({
             userId,
@@ -95,7 +95,6 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        // ✅ Nếu có discountCode thì tăng usedCount
         if (order.discountCode) {
             await DiscountModel.updateOne({ code: order.discountCode }, { $inc: { usedCount: 1 } });
         }
@@ -107,7 +106,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
                 : licenseQuantitiesRaw || {};
 
         const role = user.businessInfo?.role;
-        const isBusiness = ['admin', 'manager'].includes(role);
+        const isBusiness = ['admin'].includes(role);
 
         if (isBusiness) {
             const business = await BusinessModel.findOne({
@@ -157,6 +156,69 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             );
 
             await updateRevenueForCourses(licenseQuantities, order.price);
+            const totalLicensesPurchased = Object.values(licenseQuantities).reduce((sum, qty) => sum + qty, 0);
+
+            if (totalLicensesPurchased > 0) {
+                const discountPercent = Math.min(Math.floor(totalLicensesPurchased / 10) * 10, 30);
+                const discountCode = `GIFT${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+                if (isBusiness) {
+                    // 🎯 Business
+                    await DiscountModel.create({
+                        code: discountCode,
+                        name: `Voucher ${discountPercent}% for business`,
+                        description: `Voucher for purchasing course from Academix`,
+                        discountType: 'percentage',
+                        amount: discountPercent,
+                        accessType: 'private',
+                        allowedBusinesses: [user?.businessInfo.businessId],
+                        startDate: new Date(),
+                        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        usageLimit: 1,
+                        usedCount: 0,
+                        isActive: true
+                    });
+
+                    await sendMail({
+                        email: user.email,
+                        subject: `✅ Your course purchase was successful`,
+                        template: 'purchase-success-with-discount.ejs',
+                        data: {
+                            name: user.name,
+                            discountPercent,
+                            discountCode,
+                            days: 30
+                        }
+                    });
+                } else {
+                    await DiscountModel.create({
+                        code: discountCode,
+                        name: `Voucher ${discountPercent}% for you`,
+                        description: `Voucher for purchasing course from Academix`,
+                        discountType: 'percentage',
+                        amount: 10,
+                        accessType: 'private',
+                        allowedUsers: [user._id],
+                        startDate: new Date(),
+                        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        usageLimit: 1,
+                        usedCount: 0,
+                        isActive: true
+                    });
+
+                    await sendMail({
+                        email: user.email,
+                        subject: `✅ Your course purchase was successful`,
+                        template: 'purchase-success-with-discount.ejs',
+                        data: {
+                            name: user.name,
+                            discountPercent,
+                            discountCode,
+                            days: 30
+                        }
+                    });
+                }
+            }
         }
 
         res.sendStatus(200);

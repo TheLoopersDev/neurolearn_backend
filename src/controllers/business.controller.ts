@@ -9,7 +9,8 @@ import fs from 'fs';
 import CourseModel from '../models/Course.model';
 import ProgressModel from '../models/Progress.model';
 import cron from 'node-cron';
-//add employee by email
+import jwt from 'jsonwebtoken';
+import InviteModel from '../models/Invite.model';
 export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { businessId } = req.params;
     const { email, role } = req.body;
@@ -21,44 +22,81 @@ export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response,
     const business = await BusinessModel.findById(businessId);
     if (!business) return next(new ErrorHandler('Business not found', 404));
 
-    const user = await UserModel.findOne({ email: email.toLowerCase() });
-    if (!user) return next(new ErrorHandler('User not part of your business', 404));
+    const normalizedEmail = email.toLowerCase();
+    const user = await UserModel.findOne({ email: normalizedEmail });
 
-    const alreadyInBusiness = business.employees.some((emp: any) => emp.user.toString() === user._id.toString());
-    if (alreadyInBusiness) {
-        return next(new ErrorHandler('User already in this business', 400));
-    }
-
-    user.businessInfo = {
-        businessId: business._id,
-        role: role
-    };
-    await user.save();
-
-    business.employees.push({
-        user: user._id,
-        role: role
-    });
-    await business.save();
-
-    await sendMail({
-        email: user.email,
-        subject: `You've been added to ${business.businessName}`,
-        template: 'added-to-business.ejs',
-        data: {
-            user: { name: user.name },
-            businessName: business.businessName,
-            role
+    if (user) {
+        // Nếu user đã tồn tại
+        const alreadyInBusiness = business.employees.some((emp: any) => emp.user.toString() === user._id.toString());
+        if (alreadyInBusiness) {
+            return next(new ErrorHandler('User already in this business', 400));
         }
-    });
 
-    res.status(200).json({
-        success: true,
-        message: `User ${user.name} added to business as ${role}`
-    });
+        user.businessInfo = { businessId: business._id, role };
+        await user.save();
+
+        business.employees.push({ user: user._id, role });
+        await business.save();
+
+        await sendMail({
+            email: user.email,
+            subject: `You've been added to ${business.businessName}`,
+            template: 'added-to-business.ejs',
+            data: {
+                user: { name: user.name },
+                businessName: business.businessName,
+                role
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: `User ${user.name} added to business as ${role}`
+        });
+    } else {
+        // Nếu chưa có tài khoản → tạo lời mời pending
+        const token = jwt.sign(
+            { email: normalizedEmail, businessId: business._id, role },
+            process.env.ACTIVATION_SECRET!,
+            {
+                expiresIn: '7d'
+            }
+        );
+
+        await InviteModel.create({
+            email: normalizedEmail,
+            businessId: business._id,
+            role,
+            status: 'pending',
+            token
+        });
+
+        await sendMail({
+            email: normalizedEmail,
+            subject: `Invitation to join ${business.businessName}`,
+            template: 'invite-to-business.ejs',
+            data: {
+                businessName: business.businessName,
+                role,
+                registerLink: `${process.env.CLIENT_URL}`
+            }
+        });
+
+        if (user) {
+            return res.status(200).json({
+                success: true,
+                message: `User ${user.name} added to business as ${role}`
+            });
+        } else {
+            return res.status(200).json({
+                success: true,
+                message: `User not exist, Invitation sent to ${normalizedEmail}`
+            });
+        }
+    }
 });
 
-//add list of employees from excel file
+// ------------------ IMPORT TỪ EXCEL ------------------
 export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { businessId } = req.params;
     const file = req.file;
@@ -73,11 +111,12 @@ export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Res
     const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     let success = 0,
+        invited = 0,
         failed = 0,
         failedList: any[] = [];
 
     for (const row of data) {
-        const email = (row as any).email?.toString().trim();
+        const email = (row as any).email?.toString().trim().toLowerCase();
         const role = (row as any).role?.toString().toLowerCase() || 'employee';
 
         if (!email || !['admin', 'manager', 'employee'].includes(role)) {
@@ -87,41 +126,57 @@ export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Res
         }
 
         const user = await UserModel.findOne({ email });
-        if (!user) {
-            failed++;
-            failedList.push({ email, reason: 'User not registered' });
-            continue;
-        }
-
-        const alreadyIn = business.employees.find((emp: any) => emp.user.toString() === user._id.toString());
-        if (alreadyIn) {
-            failed++;
-            failedList.push({ email, reason: 'Already in business' });
-            continue;
-        }
-
-        // Cập nhật user
-        user.businessInfo = {
-            businessId: business._id,
-            role
-        };
-        await user.save();
-
-        // Thêm vào business
-        business.employees.push({ user: user._id, role });
-        success++;
-
-        // Gửi mail
-        await sendMail({
-            email: user.email,
-            subject: `You've been added to ${business.name}`,
-            template: 'added-to-business.ejs',
-            data: {
-                user: { name: user.name },
-                businessName: business.name,
-                role
+        if (user) {
+            const alreadyIn = business.employees.find((emp: any) => emp.user.toString() === user._id.toString());
+            if (alreadyIn) {
+                failed++;
+                failedList.push({ email, reason: 'Already in business' });
+                continue;
             }
-        });
+
+            user.businessInfo = { businessId: business._id, role };
+            await user.save();
+
+            business.employees.push({ user: user._id, role });
+            success++;
+
+            await sendMail({
+                email: user.email,
+                subject: `You've been added to ${business.businessName}`,
+                template: 'added-to-business.ejs',
+                data: {
+                    user: { name: user.name },
+                    businessName: business.businessName,
+                    role
+                }
+            });
+        } else {
+            // Chưa có account → tạo lời mời pending
+            const token = jwt.sign({ email, businessId: business._id, role }, process.env.ACTIVATION_SECRET!, {
+                expiresIn: '7d'
+            });
+
+            await InviteModel.create({
+                email,
+                businessId: business._id,
+                role,
+                status: 'pending',
+                token
+            });
+
+            await sendMail({
+                email,
+                subject: `Invitation to join ${business.businessName}`,
+                template: 'invite-to-business.ejs',
+                data: {
+                    businessName: business.businessName,
+                    role,
+                    registerLink: `${process.env.CLIENT_URL}`
+                }
+            });
+
+            invited++;
+        }
     }
 
     await business.save();
@@ -129,7 +184,7 @@ export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Res
 
     res.status(200).json({
         success: true,
-        message: `Import completed. ${success} added, ${failed} failed.`,
+        message: `Import completed. ${success} added, ${invited} invited, ${failed} failed.`,
         failedList
     });
 });
@@ -605,14 +660,14 @@ export const getUnassignedEmployeesForCourse = catchAsync(async (req: Request, r
 // Get all businesses in database
 export const getAllBusinesses = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { page = 1, limit = 10, search, isVerified } = req.query;
-    
+
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter
     const filter: any = {};
-    
+
     if (search) {
         filter.$or = [
             { businessName: { $regex: search, $options: 'i' } },
@@ -622,14 +677,14 @@ export const getAllBusinesses = catchAsync(async (req: Request, res: Response, n
             { businessSector: { $regex: search, $options: 'i' } }
         ];
     }
-    
+
     if (isVerified !== undefined) {
         filter.isVerified = isVerified === 'true';
     }
 
     // Get total count for pagination
     const totalBusinesses = await BusinessModel.countDocuments(filter);
-    
+
     // Get businesses with pagination and populate
     const businesses = await BusinessModel.find(filter)
         .populate('createdBy', 'name email avatar')
@@ -663,11 +718,11 @@ export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res
     const totalBusinesses = await BusinessModel.countDocuments({});
     const verifiedBusinesses = await BusinessModel.countDocuments({ isVerified: true });
     const unverifiedBusinesses = await BusinessModel.countDocuments({ isVerified: false });
-    
+
     // Get businesses created in last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentBusinesses = await BusinessModel.countDocuments({
         createdAt: { $gte: thirtyDaysAgo }
     });

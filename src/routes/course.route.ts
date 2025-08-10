@@ -34,6 +34,7 @@ import {
     getSingleCourseFullDetail,
     getCourseById,
     getReviewCourseById,
+    checkCoursePurchased,
     getInstructorReviewStats,
     getStudentStats,
     getInstructorCourseStats,
@@ -247,6 +248,8 @@ router.post('/sign-delete', getSignatureForDelete);
  *         description: Course not found
  */
 router.get('/:id', getSingleCourse, getUserInfo);
+
+router.get('/:id/is-purchased', isAuthenticated, updateAccessToken, checkCoursePurchased);
 
 /**
  * @swagger

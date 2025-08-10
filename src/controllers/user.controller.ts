@@ -19,12 +19,15 @@ import {
     updateUserRoleService,
     getAllInstructorsService
 } from '../services/user.service';
-import ProgressModel from '@/models/Progress.model';
-import CourseModel from '@/models/Course.model';
-import QuizModel from '@/models/Quiz.model';
-import LessonModel from '@/models/Lesson.model';
+import InviteModel from '../models/Invite.model';
+import BusinessModel from '../models/Business.model';
+import ProgressModel from '../models/Progress.model';
+import CourseModel from '../models/Course.model';
+import QuizModel from '../models/Quiz.model';
+import LessonModel from '../models/Lesson.model';
 import mongoose, { Types } from 'mongoose';
-import { getLatestCourse } from '@/services/course.service';
+import { getLatestCourse } from '../services/course.service';
+
 
 dotenv.config();
 
@@ -188,7 +191,29 @@ export const activateUser = catchAsync(async (req: Request, res: Response, next:
     const isEmailExist = await UserModel.findOne({ email });
     if (isEmailExist) return next(new ErrorHandler('Email already exist', 400));
 
-    await UserModel.create({ name, email, password });
+    const createdUser = await UserModel.create({ name, email, password });
+    const invites = await InviteModel.find({ email, status: 'pending' });
+
+    for (const invite of invites) {
+        const business = await BusinessModel.findById(invite.businessId);
+        if (!business) continue;
+
+        // Add user vào business
+        business.employees.push({ user: createdUser._id, role: invite.role });
+        await business.save();
+
+        // Nếu muốn lưu thông tin business vào user
+        createdUser.businessInfo = {
+            businessId: business._id,
+            role: invite.role
+        };
+        await createdUser.save();
+
+        // Update invite status
+        invite.status = 'accepted';
+        invite.acceptedAt = new Date();
+        await invite.save();
+    }
 
     res.status(201).json({ success: true });
 });

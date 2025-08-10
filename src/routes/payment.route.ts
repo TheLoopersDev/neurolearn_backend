@@ -9,7 +9,12 @@ const router = express.Router();
  * @swagger
  * /api/payment/create-payment-link:
  *   post:
- *     summary: Tạo link thanh toán PayOS
+ *     summary: Tạo link thanh toán PayOS cho người dùng hoặc doanh nghiệp
+ *     description: >
+ *       Tạo một đường dẫn thanh toán qua PayOS.
+ *       - `description` không được dài hơn 25 ký tự.
+ *       - `courseIds` phải là mảng các ObjectId hợp lệ.
+ *       - Nếu người dùng thuộc doanh nghiệp và có quyền `admin` thì sẽ được ghi nhận là `business` khi tạo đơn hàng.
  *     tags: [Payment]
  *     security:
  *       - cookieAuth: []
@@ -26,26 +31,33 @@ const router = express.Router();
  *             properties:
  *               amount:
  *                 type: number
+ *                 description: Số tiền cần thanh toán (đã áp dụng giảm giá nếu có)
  *                 example: 100000
  *               description:
  *                 type: string
+ *                 description: Mô tả giao dịch (tối đa 25 ký tự)
  *                 example: "Thanh toán khóa học React"
  *               courseIds:
  *                 type: array
+ *                 description: Danh sách ID các khóa học cần thanh toán
  *                 items:
  *                   type: string
  *                 example: ["66512f221e3efb486f7a4082", "66512f221e3efb486f7a4083"]
  *               licenseQuantities:
  *                 type: object
+ *                 description: Số lượng license mua cho từng khóa học (nếu thanh toán theo dạng license cho doanh nghiệp)
  *                 additionalProperties:
  *                   type: number
- *                 example: {
- *                   "66512f221e3efb486f7a4082": 5,
+ *                 example:
+ *                   "66512f221e3efb486f7a4082": 5
  *                   "66512f221e3efb486f7a4083": 2
- *                 }
+ *               discountCode:
+ *                 type: string
+ *                 description: Mã giảm giá áp dụng (nếu có)
+ *                 example: "SALE50"
  *     responses:
  *       200:
- *         description: Trả về URL thanh toán
+ *         description: "Tạo link thanh toán thành công"
  *         content:
  *           application/json:
  *             schema:
@@ -55,10 +67,11 @@ const router = express.Router();
  *                   type: string
  *                   example: "https://sandbox.payos.vn/payment-link/abcxyz"
  *       400:
- *         description: Thiếu trường bắt buộc hoặc dữ liệu không hợp lệ
+ *         description: "Thiếu trường bắt buộc hoặc dữ liệu không hợp lệ (ví dụ: mô tả quá 25 ký tự)"
  *       500:
- *         description: Lỗi server
+ *         description: "Lỗi server khi tạo link thanh toán"
  */
+
 router.post('/create-payment-link', updateAccessToken, isAuthenticated, createPaymentLink);
 
 /**
