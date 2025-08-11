@@ -7,26 +7,24 @@ import { getCreditCardByAccountNumber, getCreditCardByUserId, createCreditCardFo
 // Create credit card for current instructor
 export const createCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('User not authenticated', 401));
+    return next(new ErrorHandler('Not authorized', 401));
   }
 
-  const userId = req.user._id.toString();
-  const creditCard = await createCreditCardForUser(userId, req.body);
+  const creditCard = await createCreditCardForUser(req.user._id, req.body);
   
   return res.status(201).json({
     success: true,
-    creditCard,
+    data: creditCard,
   });
 });
 
 // Get credit card of current instructor
 export const getCurrentUserCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('User not authenticated', 401));
+    return next(new ErrorHandler('Not authorized', 401));
   }
 
-  const userId = req.user._id.toString();
-  const creditCard = await getCreditCardByUserId(userId);
+  const creditCard = await getCreditCardByUserId(req.user._id);
 
   // Lấy danh sách bank từ API vietqr
   let bankList: any[] = [];
@@ -79,12 +77,11 @@ export const getCreditCardByAccountNumberController = catchAsync(async (req: Req
 // Update current user's credit card
 export const updateCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('User not authenticated', 401));
+    return next(new ErrorHandler('Not authorized', 401));
   }
 
-  const userId = req.user._id.toString();
   const creditCard = await CreditCard.findOneAndUpdate(
-    { user: userId },
+    { user: req.user._id },
     req.body,
     {
       new: true,
@@ -98,18 +95,17 @@ export const updateCreditCard = catchAsync(async (req: Request, res: Response, n
 
   return res.status(200).json({
     success: true,
-    creditCard,
+    data: creditCard,
   });
 });
 
 // Delete current user's credit card
 export const deleteCreditCard = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.user || !req.user._id) {
-    return next(new ErrorHandler('User not authenticated', 401));
+    return next(new ErrorHandler('Not authorized', 401));
   }
 
-  const userId = req.user._id.toString();
-  const creditCard = await CreditCard.findOneAndDelete({ user: userId });
+  const creditCard = await CreditCard.findOneAndDelete({ user: req.user._id });
   
   if (!creditCard) {
     return next(new ErrorHandler('Credit card not found', 404));
@@ -117,7 +113,7 @@ export const deleteCreditCard = catchAsync(async (req: Request, res: Response, n
 
   return res.status(200).json({
     success: true,
-    message: 'Credit card deleted successfully',
+    data: {},
   });
 });
 
