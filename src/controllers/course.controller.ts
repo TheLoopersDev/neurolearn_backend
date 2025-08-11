@@ -204,6 +204,7 @@ import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
 import ProgressModel from '../models/Progress.model';
 import { Types } from 'mongoose';
+import QuizModel from '@/models/Quiz.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -1561,113 +1562,11 @@ export const updateLessonCompletionStatus = catchAsync(async (req: Request, res:
     });
 });
 
-//get single course by id
-// export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-//     const courseId = req.params.id;
-
-//     if (!courseId) {
-//         return next(new ErrorHandler('Please provide course id', 400));
-//     }
-
-//     const course = await CourseModel.findById(courseId).populate([
-//         { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
-//         { path: 'level', select: 'name' },
-//         { path: 'category', select: 'name' },
-//         { path: 'subCategory', select: 'name' }
-//     ]);
-
-//     if (!course) {
-//         return next(new ErrorHandler('Course not found', 404));
-//     }
-
-//     // Populate Sections từ Course
-//     const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
-//         .sort({ order: 1 })
-//         .populate([
-//             {
-//                 path: 'lessons',
-//                 match: { isPublished: true },
-//                 options: { sort: { order: 1 } }
-//             },
-//             {
-//                 path: 'quizzes',
-//                 select: 'name examTitle duration difficulty totalQuestions isPublished sectionOrder lessonOrder',
-//                 match: { isPublished: true }
-//             }
-//         ])
-//         .lean();
-
-//     // Xử lý ẩn video nếu không miễn phí
-//     const processedSections = sections.map((section) => ({
-//         ...section,
-//         lessons: Array.isArray(section.lessons)
-//             ? section.lessons.map((lesson) => ({
-//                   ...lesson,
-//                   videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-//               }))
-//             : [],
-//         quizzes: Array.isArray(section.quizzes) ? section.quizzes : []
-//     }));
-
-//     const totalLessons = processedSections.reduce(
-//         (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
-//         0
-//     );
-
-//     // Tổng học sinh
-//     const instructorCourseIds = course.authorId?.uploadedCourses || [];
-//     const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
-//     const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
-
-//     const totalCourses = instructorCourseIds.length;
-
-//     const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
-//     const hours = Math.floor(durationInMinutes / 60);
-//     const minutes = durationInMinutes % 60;
-//     const durationText = `${hours}h ${minutes}m`;
-
-//     return res.status(200).json({
-//         success: true,
-//         course: {
-//             _id: course._id,
-//             name: course.name,
-//             subTitle: course.subTitle,
-//             description: course.description,
-//             thumbnail: course.thumbnail,
-//             demoUrl: course.demoUrl,
-//             price: course.price,
-//             estimatedPrice: course.estimatedPrice,
-//             isFree: course.isFree,
-//             purchased: course.purchased ?? 0,
-//             level: course.level?.name ?? null,
-//             reviews: course.reviews || [],
-//             rating: course.rating ?? 0,
-//             category: course.category,
-//             subCategory: course.subCategory,
-//             overview: course.overview || '',
-//             topics: Array.isArray(course.topics) ? course.topics : [],
-//             totalLessons,
-//             durationText,
-//             sections: processedSections,
-//             publisher: {
-//                 name: course.authorId?.name || '',
-//                 avatar: course.authorId?.avatar || '',
-//                 email: course.authorId?.email || '',
-//                 profession: course.authorId?.profession || '',
-//                 description: course.authorId?.introduce || '',
-//                 rating: course.rating ?? 0,
-//                 students: totalStudents,
-//                 courses: totalCourses
-//             }
-//         }
-//     });
-// });
-
 // ===== Helper: đếm tổng lesson publish của course (đúng order) =====
 async function countTotalLessonsOfCourse(courseId: string) {
     const sections = await SectionModel.find({ course: courseId, isPublished: true })
         .sort({ order: 1 })
-        .select('_id lessons')
+        .select('_id lessons') // items không cần ở đây
         .populate({
             path: 'lessons',
             match: { isPublished: true },
@@ -1676,7 +1575,7 @@ async function countTotalLessonsOfCourse(courseId: string) {
         })
         .lean();
 
-    const total = sections.reduce((sum, s: any) => sum + (s.lessons?.length || 0), 0);
+    const total = sections.reduce((sum: number, s: any) => sum + (s.lessons?.length || 0), 0);
     return { sections, total };
 }
 
@@ -1689,14 +1588,12 @@ async function ensureProgressSeeded(userId: string, courseId: string) {
 
     const completedSections = sections.map((sec: any) => ({
         sectionId: sec._id,
-        // totalLessonsInSection & completedLessons sẽ auto-calc từ sub-schema
         lessons: (sec.lessons || []).map((l: any) => ({
             lessonId: l._id,
             isCompleted: false
         }))
     }));
 
-    // create() sẽ chạy save middleware => auto-calc totals
     const created = await ProgressModel.create({
         user: userId,
         course: courseId,
@@ -1707,11 +1604,23 @@ async function ensureProgressSeeded(userId: string, courseId: string) {
     return fresh!;
 }
 
+// ===== Handler: lấy đủ items + quizzes, build order/title đúng =====
+
 export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const dbgOn = process.env.QUIZ_DEBUG === '1';
+    const dbg = (label: string, payload?: any) => {
+        if (!dbgOn) return;
+        try {
+            const safe = payload && typeof payload === 'object' ? JSON.parse(JSON.stringify(payload)) : payload;
+            // eslint-disable-next-line no-console
+            console.log(`[COURSE:detail] ${label}`, safe);
+        } catch {
+            console.log(`[COURSE:detail] ${label}`, payload);
+        }
+    };
+
     const courseId = req.params.id as string;
     const userId = req.user?._id as string | undefined;
-    console.log('course-data req.user:', req.user?._id);
-
     if (!courseId) return next(new ErrorHandler('Please provide course id', 400));
 
     const course = await CourseModel.findById(courseId).populate([
@@ -1722,85 +1631,250 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     ]);
     if (!course) return next(new ErrorHandler('Course not found', 404));
 
-    // Sections/lessons/quizzes (publish + order + lean)
+    // 1) Sections
     const sections = await SectionModel.find({ _id: { $in: course.sections }, isPublished: true })
         .sort({ order: 1 })
-        .populate([
-            {
-                path: 'lessons',
-                match: { isPublished: true },
-                options: { sort: { order: 1 } },
-                select: '_id title order videoLength isFree videoUrl sectionId'
-            },
-            {
-                path: 'quizzes',
-                select: 'name examTitle duration difficulty totalQuestions isPublished sectionOrder lessonOrder',
-                match: { isPublished: true }
-            }
-        ])
-        .lean();
+        .select('_id title order courseId')
+        .lean<any[]>();
 
-    // ===== Progress (seed nếu cần) =====
+    const sectionIds = sections.map((s) => s._id);
+
+    // 2) Lessons
+    const lessons = await LessonModel.find({ sectionId: { $in: sectionIds }, isPublished: true })
+        .select('_id title order videoLength isFree videoUrl sectionId')
+        .lean<any[]>();
+
+    // 3) Quizzes (+ những field cần cho progress)
+    const quizzes = await QuizModel.find({ sectionId: { $in: sectionIds } })
+        .select(
+            '_id sectionId order name examTitle duration difficulty totalQuestions isPublished passingScore userScores.user userScores.score userScores.attemptedAt'
+        )
+        .lean<any[]>();
+
+    // 4) Progress (lessons) từ Enrollment/Progress của bạn
     let progressDoc: any = null;
-    if (userId) {
-        progressDoc = await ensureProgressSeeded(userId.toString(), courseId.toString());
-    }
+    if (userId) progressDoc = await ensureProgressSeeded(String(userId), String(courseId));
 
-    // sectionId -> Set(lessonId hoàn thành)
+    // Map bài học đã completed theo section
     const completedMap = new Map<string, Set<string>>();
     for (const sec of progressDoc?.completedSections || []) {
         const sid = String(sec.sectionId);
         const set = new Set<string>();
-        for (const l of sec.lessons || []) {
-            if (l?.isCompleted) set.add(String(l.lessonId));
-        }
+        for (const l of sec.lessons || []) if (l?.isCompleted) set.add(String(l.lessonId));
         completedMap.set(sid, set);
     }
 
-    // Merge isCompleted vào lessons + tính % theo section
+    // 4b) Quiz progress từ chính QuizModel.userScores (lọc theo user hiện tại)
+    // quizProgressMap: quizId -> { attempts, lastScore, bestScore, lastAttemptAt, isCompleted, isPassed }
+    // 4b) Quiz progress theo LATEST attempt
+    const quizProgressMap = new Map<
+        string,
+        {
+            attempts: number;
+            lastScore: number | null; // = latest attempt score
+            bestScore: number | null;
+            lastAttemptAt: Date | null;
+            isCompleted: boolean; // có attempt là completed
+            isPassed: boolean; // ✅ theo latest attempt
+            latestAttempt?: {
+                attemptId?: string;
+                score: number;
+                attemptedAt: Date | null;
+                percentage?: number;
+            };
+            passingScore?: number;
+        }
+    >();
+
+    if (Array.isArray(quizzes) && userId) {
+        for (const q of quizzes) {
+            const attempts = (Array.isArray(q.userScores) ? q.userScores : [])
+                .filter((s: any) => String(s?.user) === String(userId))
+                .sort((a: any, b: any) => {
+                    const ta = a?.attemptedAt ?? a?.createdAt ?? 0;
+                    const tb = b?.attemptedAt ?? b?.createdAt ?? 0;
+                    return new Date(tb).getTime() - new Date(ta).getTime();
+                });
+
+            if (attempts.length === 0) continue;
+
+            const latest = attempts[0];
+            const lastScore = Number(latest?.score ?? 0);
+            const bestScore = Math.max(...attempts.map((a: any) => Number(a?.score ?? 0)));
+            const lastAttemptAt = latest?.attemptedAt
+                ? new Date(latest.attemptedAt)
+                : latest?.createdAt
+                  ? new Date(latest.createdAt)
+                  : null;
+            const passingScore = Number(q.passingScore ?? 0);
+            const isPassed = lastScore >= passingScore; // ✅ theo lần gần nhất
+
+            const percentage = q?.totalQuestions ? Math.round((lastScore / Number(q.totalQuestions)) * 100) : undefined;
+
+            quizProgressMap.set(String(q._id), {
+                attempts: attempts.length,
+                lastScore,
+                bestScore,
+                lastAttemptAt,
+                isCompleted: true,
+                isPassed,
+                passingScore,
+                latestAttempt: {
+                    attemptId: latest?._id ? String(latest._id) : undefined,
+                    score: lastScore,
+                    attemptedAt: lastAttemptAt,
+                    percentage
+                }
+            });
+        }
+    }
+
+    if (Array.isArray(quizzes) && userId) {
+        for (const q of quizzes) {
+            const attempts = (Array.isArray(q.userScores) ? q.userScores : [])
+                .filter((s: any) => String(s?.user) === String(userId))
+                .sort((a: any, b: any) => new Date(b.attemptedAt).getTime() - new Date(a.attemptedAt).getTime());
+
+            if (attempts.length === 0) continue;
+
+            const lastScore = Number(attempts[0]?.score ?? 0);
+            const bestScore = Math.max(...attempts.map((a: any) => Number(a?.score ?? 0)));
+            const lastAttemptAt = attempts[0]?.attemptedAt ? new Date(attempts[0].attemptedAt) : null;
+            const passingScore = Number(q.passingScore ?? 0);
+            const isPassed = lastScore >= passingScore; // hoặc bestScore >= passingScore, tuỳ yêu cầu
+            quizProgressMap.set(String(q._id), {
+                attempts: attempts.length,
+                lastScore,
+                bestScore,
+                lastAttemptAt,
+                isCompleted: true,
+                isPassed
+            });
+        }
+    }
+
+    dbg('quizProgressMap.size', quizProgressMap.size);
+
+    // 5) Group theo sectionId
+    const lessonsBySection: Record<string, any[]> = Object.create(null);
+    const quizzesBySection: Record<string, any[]> = Object.create(null);
+    for (const sid of sectionIds) {
+        lessonsBySection[String(sid)] = [];
+        quizzesBySection[String(sid)] = [];
+    }
+    for (const l of lessons) lessonsBySection[String(l.sectionId)].push(l);
+    for (const q of quizzes) quizzesBySection[String(q.sectionId)].push(q);
+
+    // 6) Build section items
     const processedSections = sections.map((section: any) => {
         const sid = String(section._id);
         const doneSet = completedMap.get(sid) ?? new Set<string>();
 
-        const lessons = (section.lessons || []).map((lesson: any) => {
-            const lid = String(lesson._id);
+        const secLessons = (lessonsBySection[sid] || []).map((l: any) => ({
+            ...l,
+            isCompleted: doneSet.has(String(l._id)),
+            videoUrl: l.isFree ? l.videoUrl : undefined
+        }));
+
+        const secQuizzes = (quizzesBySection[sid] || []).map((q: any) => {
+            const qp = quizProgressMap.get(String(q._id));
+            const title = q.name ?? q.examTitle ?? 'Untitled quiz';
             return {
-                ...lesson,
-                isCompleted: doneSet.has(lid),
-                videoUrl: lesson.isFree ? lesson.videoUrl : undefined // ẩn link nếu không free
+                ...q,
+                // ✅ các cờ FE đang dùng
+                isCompleted: !!qp,
+                isPassed: !!qp?.isPassed,
+                lastScore: qp?.lastScore ?? null,
+                bestScore: qp?.bestScore ?? null,
+                attempts: qp?.attempts ?? 0,
+                lastAttemptAt: qp?.lastAttemptAt ?? null,
+                name: title,
+                title
             };
         });
 
-        const quizzes = Array.isArray(section.quizzes) ? section.quizzes : [];
-        const completedCount = lessons.filter((l: any) => l.isCompleted).length;
-        const totalInSec = lessons.length;
-        const sectionProgressPercentage = totalInSec ? Math.round((completedCount / totalInSec) * 100) : 0;
+        // MIX + sort
+        const lessonItems = secLessons.map((l: any) => ({
+            kind: 'lesson' as const,
+            _id: l._id,
+            order: typeof l.order === 'number' ? l.order : 0,
+            title: l.title,
+            payload: l
+        }));
+        const quizItems = secQuizzes.map((q: any) => ({
+            kind: 'quiz' as const,
+            _id: q._id,
+            order: typeof q.order === 'number' ? q.order : 0,
+            name: q.name,
+            title: q.name,
+            payload: q
+        }));
+        const items = [...lessonItems, ...quizItems].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        // Progress section — có 2 kiểu, bạn chọn 1:
+        // a) chỉ tính theo lessons (giữ nguyên)
+        const completedLessonsCount = secLessons.filter((l: any) => l.isCompleted).length;
+        const totalLessonsInSection = secLessons.length;
+        const sectionProgressPercentage = totalLessonsInSection
+            ? Math.round((completedLessonsCount / totalLessonsInSection) * 100)
+            : 0;
+
+        // b) tính theo tổng (lessons + quizzes)
+        const completedQuizzesCount = secQuizzes.filter((q: any) => q.isPassed).length;
+        const totalQuizzesInSection = secQuizzes.length;
+        const totalItemsInSection = totalLessonsInSection + totalQuizzesInSection;
+        const sectionProgressAllPercent = totalItemsInSection
+            ? Math.round(((completedLessonsCount + completedQuizzesCount) / totalItemsInSection) * 100)
+            : 0;
 
         return {
             _id: section._id,
             title: section.title,
             order: section.order,
-            lessons,
-            quizzes,
-            completedCount,
-            totalLessonsInSection: totalInSec,
-            sectionProgressPercentage
+            lessons: secLessons,
+            quizzes: secQuizzes,
+            items,
+            // giữ số liệu cũ + thêm số liệu all-items để bạn muốn hiển thị kiểu nào cũng được
+            completedCount: completedLessonsCount,
+            totalLessonsInSection,
+            sectionProgressPercentage, // legacy (lessons only)
+            sectionItemsCompleted: completedLessonsCount + completedQuizzesCount, // new
+            totalItemsInSection, // new
+            sectionProgressAllPercent // new
         };
     });
 
-    // Tổng số lesson publish hiện tại
+    // 7) Tổng số lesson publish
     const totalLessons = processedSections.reduce((sum, s) => sum + (s.totalLessonsInSection || 0), 0);
+    // 7b) Tổng số quiz
+    const totalQuizzes = processedSections.reduce((sum, s) => sum + (s.quizzes?.length || 0), 0);
 
-    // Tổng kết progress (tính theo dữ liệu vừa merge, không ghi DB)
+    // 8) Tổng quan progress
     let progressSummary: any = null;
-    if (userId && progressDoc) {
-        const totalCompleted = processedSections.reduce((acc, s) => acc + (s.completedCount || 0), 0);
-        const progressPercentage = totalLessons ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+    if (userId) {
+        // a) legacy: chỉ lessons
+        const totalCompletedLessons = processedSections.reduce((acc, s) => acc + (s.completedCount || 0), 0);
+        const progressLessonsOnly = totalLessons ? Math.round((totalCompletedLessons / totalLessons) * 100) : 0;
 
-        progressSummary = { totalLessons, totalCompleted, progressPercentage };
+        // b) all items: lessons + quizzes
+        const totalCompletedItems = processedSections.reduce((acc, s) => acc + (s.sectionItemsCompleted || 0), 0);
+        const totalItems = totalLessons + totalQuizzes;
+        const progressAll = totalItems ? Math.round((totalCompletedItems / totalItems) * 100) : 0;
+
+        // 👉 chọn cái nào bạn muốn FE dùng. Mình trả cả 2 cho bạn linh hoạt.
+        progressSummary = {
+            totalLessons, // legacy field
+            totalCompleted: totalCompletedLessons, // legacy field
+            progressPercentage: progressLessonsOnly, // legacy field (giữ tương thích)
+            // new fields:
+            totalQuizzes,
+            totalItems,
+            totalCompletedItems,
+            progressAllPercentage: progressAll
+        };
     }
 
-    // Publisher stats
+    // 9) Publisher stats
     const instructorCourseIds = course.authorId?.uploadedCourses || [];
     const instructorCourses = instructorCourseIds.length
         ? await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean()
@@ -1813,8 +1887,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     const minutes = durationInMinutes % 60;
     const durationText = `${hours}h ${minutes}m`;
 
-    // (Tuỳ chọn) Nếu muốn **đồng bộ** totals cũ trong progressDoc với số publish hiện tại,
-    // nhưng không ghi DB: bạn đã có progressSummary ở trên để FE dùng.
+    dbg('response.progress', progressSummary);
 
     return res.status(200).json({
         success: true,
@@ -1838,8 +1911,8 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             topics: Array.isArray(course.topics) ? course.topics : [],
             durationText,
             totalLessons,
-            sections: processedSections, // ✅ mỗi lesson có isCompleted đã merge
-            progress: progressSummary, // ✅ tổng quan để hiển thị progress bar
+            sections: processedSections, // đã MIX & có quiz progress
+            progress: progressSummary, // có cả legacy (lessons) & all-items
             publisher: {
                 name: course.authorId?.name || '',
                 avatar: course.authorId?.avatar || '',
@@ -1853,9 +1926,6 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         }
     });
 });
-
-
-
 
 export const getReviewCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;

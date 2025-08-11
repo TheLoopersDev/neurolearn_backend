@@ -368,7 +368,7 @@ export const socialAuth = catchAsync(async (req: Request, res: Response, next: N
     const { email, name, avatar } = req.body as ISocialAuthBody;
     const user = await UserModel.findOne({ email });
     if (!user) {
-        const newUser = await UserModel.create({ email, name, avatar });
+        const newUser = await UserModel.create({ email, name, avatar: avatar ? { url: avatar } : undefined });
         sendToken(newUser, 200, res);
     } else {
         sendToken(user, 200, res);

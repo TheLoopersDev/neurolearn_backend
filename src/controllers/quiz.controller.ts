@@ -244,49 +244,249 @@ export const deleteQuiz = catchAsync(async (req: Request, res: Response, next: N
 });
 
 // POST /api/quizzes/:quizId/submit - Submit quiz answers
+// POST /api/quizzes/:id/submit
 export const submitQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const quizId = req.params.id;
-    const { userId, answers } = req.body;
+  const quizId = req.params.id;
+  const { answers, timeTakenSeconds, meta, isTimeOut } = req.body as {
+    answers: { questionId: string; selectedOptionIds: (string | number)[] }[];
+    timeTakenSeconds?: number;
+    meta?: Record<string, unknown> & { isTimeOut?: boolean; courseId?: string };
+    isTimeOut?: boolean;
+  };
 
-    // Validate quizId format
-    if (!mongoose.Types.ObjectId.isValid(quizId)) {
-        return next(new ErrorHandler('Invalid quiz ID format', 400));
+  // ---------- helpers ----------
+  const logOn = process.env.NODE_ENV !== 'production' || process.env.QUIZ_DEBUG === '1';
+  const dbg = (label: string, payload?: any) => {
+    if (!logOn) return;
+    try {
+      // tránh crash vì circular
+      const safe = payload && typeof payload === 'object'
+        ? JSON.parse(JSON.stringify(payload))
+        : payload;
+      // eslint-disable-next-line no-console
+      console.log(`[QUIZ:submit] ${label}`, safe);
+    } catch {
+      console.log(`[QUIZ:submit] ${label}`, payload);
+    }
+  };
+
+  const isIndexArray = (arr: any[]) =>
+    Array.isArray(arr) && arr.length > 0 && arr.every(v => typeof v === 'number' || /^\d+$/.test(String(v)));
+
+  const toStringArray = (arr: any[]) => (Array.isArray(arr) ? arr.map(v => String(v)) : []);
+
+  const getOptionIdByIndex = (q: any, i: number) => {
+    const opt = Array.isArray(q?.options) ? q.options[i] : null;
+    return String(opt?.id ?? opt?._id ?? opt?.optionId ?? i);
+  };
+
+  // ---------- validate ----------
+  if (!mongoose.Types.ObjectId.isValid(quizId)) {
+    return next(new ErrorHandler('Invalid quiz ID format', 400));
+  }
+
+  const authUser = (req as any).user;
+  const userId = authUser?._id || authUser?.id;
+  if (!userId) {
+    return next(new ErrorHandler('Unauthorized', 401));
+  }
+
+  if (!Array.isArray(answers)) {
+    return next(new ErrorHandler('`answers` must be an array', 400));
+  }
+
+  // ---------- fetch ----------
+  const quiz = await Quiz.findById(quizId);
+  if (!quiz) {
+    return next(new ErrorHandler('Quiz not found', 404));
+  }
+
+  dbg('incoming', {
+    quizId,
+    userId,
+    answersLen: answers.length,
+    timeTakenSeconds,
+    meta,
+  });
+
+  // ---------- build userAnswer map ----------
+  const userAnswerMap = new Map<string, (string | number)[]>();
+  for (const a of answers) {
+    if (!a || !a.questionId) continue;
+    const arr = Array.isArray(a.selectedOptionIds) ? a.selectedOptionIds : [];
+    userAnswerMap.set(String(a.questionId), arr);
+  }
+
+  // Helper: question id safe
+  const makeSafeQId = (q: any, fallback: string) => {
+    const raw = q?._id ?? q?.id ?? q?.questionId ?? q?.uuid ?? q?.slug ?? null;
+    return raw != null ? String(raw) : fallback;
+  };
+
+  let totalScore = 0;
+  let maxPossibleScore = 0;
+  let attemptedQuestions = 0;
+  let correctQuestions = 0;
+  let incorrectQuestions = 0;
+  let skippedQuestions = 0;
+
+  const breakdown: Array<{
+    questionNumber: number;
+    questionId: string;
+    status: 'correct' | 'incorrect' | 'skipped';
+    pointsEarned: number;
+    maxPoints: number;
+    userSelectedOptionIds: string[];
+    correctAnswerIds: string[];
+  }> = [];
+
+  // ---------- grade ----------
+  quiz.questions.forEach((q: any, idx: number) => {
+    const qId = makeSafeQId(q, String(idx));
+    const rawSelected = userAnswerMap.get(qId) ?? [];
+
+    // normalize user selected -> IDs
+    const selectedIds: string[] = isIndexArray(rawSelected)
+      ? (rawSelected as any[]).map(n => getOptionIdByIndex(q, Number(n)))
+      : toStringArray(rawSelected);
+
+    // normalize correct answers -> IDs
+    let rawCorrect: any[] = [];
+    if (Array.isArray(q?.correctAnswerIds)) rawCorrect = q.correctAnswerIds;
+    else if (Array.isArray(q?.correctAnswers)) rawCorrect = q.correctAnswers;
+    else if (q?.correctAnswer != null) rawCorrect = [q.correctAnswer];
+
+    const correctIds: string[] = isIndexArray(rawCorrect)
+      ? rawCorrect.map(n => getOptionIdByIndex(q, Number(n)))
+      : toStringArray(rawCorrect);
+
+    const maxPoints = Number(q?.points ?? 0);
+    maxPossibleScore += maxPoints;
+
+    let status: 'correct' | 'incorrect' | 'skipped' = 'skipped';
+    let pointsEarned = 0;
+
+    if (selectedIds.length === 0) {
+      skippedQuestions++;
+    } else {
+      attemptedQuestions++;
+      const a = [...selectedIds].sort();
+      const b = [...correctIds].sort();
+      const ok = a.length === b.length && a.every((v, i) => v === b[i]);
+      if (ok) {
+        status = 'correct';
+        pointsEarned = maxPoints;
+        totalScore += pointsEarned;
+        correctQuestions++;
+      } else {
+        status = 'incorrect';
+        incorrectQuestions++;
+      }
     }
 
-    // Find the quiz
-    const quiz = await Quiz.findById(quizId);
-    if (!quiz) {
-        return next(new ErrorHandler('Quiz not found', 404));
-    }
-
-    // Calculate the score
-    let score = 0;
-    quiz.questions.forEach((question: any, index: any) => {
-        if (question.correctAnswer === answers[index]) {
-            score += question.points;
-        }
+    breakdown.push({
+      questionNumber: Number(q?.questionNumber ?? idx + 1),
+      questionId: qId,
+      status,
+      pointsEarned,
+      maxPoints,
+      userSelectedOptionIds: selectedIds,
+      correctAnswerIds: correctIds,
     });
 
-    // Save the user's score
+    dbg('grade.item', {
+      idx,
+      qId,
+      number: q?.questionNumber,
+      selectedIds,
+      correctIds,
+      status,
+      pointsEarned,
+      maxPoints,
+    });
+  });
+
+  const passingScore: number = Number(quiz.passingScore ?? 0);
+  const isPassed = totalScore >= passingScore;
+  const overallStatus =
+    (meta && typeof (meta as any).isTimeOut === 'boolean')
+      ? ((meta as any).isTimeOut ? 'time-out' : 'completed')
+      : (isTimeOut ? 'time-out' : 'completed');
+
+  dbg('grade.summary', {
+    totalQuestions: Array.isArray(quiz.questions) ? quiz.questions.length : 0,
+    attemptedQuestions,
+    correctQuestions,
+    incorrectQuestions,
+    skippedQuestions,
+    totalScore,
+    maxPossibleScore,
+    passingScore,
+    isPassed,
+    overallStatus,
+  });
+
+  // ---------- persist attempt ----------
+  try {
     quiz.userScores.push({
-        user: userId,
-        score,
-        attemptedAt: new Date()
+      user: userId,
+      score: totalScore,
+      attemptedAt: new Date(),
+      timeTakenSeconds: Number(timeTakenSeconds ?? 0),
+      meta: meta ?? {},
     });
 
-    // Save the updated quiz
     await quiz.save();
     await invalidateQuizzesCache();
+    dbg('persist.ok', { saved: true });
+  } catch (e) {
+    dbg('persist.error', e);
+    // không fail request vì lỗi ghi lịch sử, nhưng log để điều tra
+  }
 
-    // Return the result
-    res.status(200).json({
-        success: true,
-        message: 'Quiz submitted successfully',
-        score,
-        passingScore: quiz.passingScore,
-        isPassed: score >= quiz.passingScore
-    });
+  // ---------- (optional) update course progress ----------
+  // TIP: nếu bạn có enrollment/progress model, cập nhật ở đây:
+  // try {
+  //   const courseId = (quiz as any)?.course || (meta as any)?.courseId;
+  //   if (courseId) {
+  //     await CourseEnrollment.updateOne(
+  //       { user: userId, course: courseId },
+  //       {
+  //         $setOnInsert: { user: userId, course: courseId },
+  //         $set: { updatedAt: new Date() },
+  //         $addToSet: { completedItems: { kind: 'quiz', id: quizId } },
+  //       },
+  //       { upsert: true }
+  //     );
+  //     dbg('progress.updated', { courseId, quizId });
+  //   }
+  // } catch (e) {
+  //   dbg('progress.error', e);
+  // }
+
+  // ---------- response ----------
+  return res.status(200).json({
+    success: true,
+    message: 'Quiz submitted successfully',
+    data: {
+      totalQuestions: Array.isArray(quiz.questions) ? quiz.questions.length : 0,
+      attemptedQuestions,
+      correctQuestions,
+      incorrectQuestions,
+      skippedQuestions,
+      totalScore,
+      maxPossibleScore,
+      overallStatus,
+      isPassed,
+      score: totalScore,
+      passingScore,
+      breakdown,
+    },
+  });
 });
+
+
+
 
 export const updateQuestion = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const quizId = req.params.id;
