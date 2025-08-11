@@ -296,7 +296,7 @@ export const updateAccessToken = catchAsync(async (req: Request, res: Response, 
             }
         }
 
-        const message = 'Could not refresh token';
+        const message = 'Please login';
 
         if (!decoded) {
             return next(new ErrorHandler(message, 400));
@@ -329,7 +329,7 @@ export const refreshToken = catchAsync(async (req: Request, res: Response, next:
     const refresh_token = req.cookies.refresh_token as string;
     const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
 
-    const message = 'Could not refresh token';
+    const message = 'Please login';
 
     if (!decoded) {
         return next(new ErrorHandler(message, 400));
