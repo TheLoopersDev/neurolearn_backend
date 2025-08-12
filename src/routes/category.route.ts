@@ -7,7 +7,8 @@ import {
     getCategories,
     getCategory,
     getSubCategoriesByCategoryId,
-    getAllCategoriesWithSubcategories
+    getAllCategoriesWithSubcategories,
+    seedSubCategories
 } from '../controllers/category.controller';
 
 /**
@@ -42,6 +43,9 @@ router.get('/', getCategories);
  *         description: List of all categories with their subcategories
  */
 router.get('/all-with-subcategories', getAllCategoriesWithSubcategories);
+
+// TEMP/ADMIN: Seed default subcategories
+router.post('/seed-subcategories', seedSubCategories);
 
 /**
  * @swagger
