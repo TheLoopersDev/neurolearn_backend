@@ -8,9 +8,11 @@ export const RequestSchema: Schema<Request> = new Schema(
             enum: ['course_approval', 'business_verification', 'instructor_verification'],
             required: true
         },
-        courseId: { type: Schema.Types.String, ref: 'Course', default: null },
-        userId: { type: Schema.Types.String, ref: 'User', required: true },
+        courseId: { type: Schema.Types.ObjectId, ref: 'Course', default: null },
+        businessId: { type: Schema.Types.ObjectId, ref: 'Business', default: null },
+        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         status: { type: String, enum: ['pending', 'approved', 'rejected', 'processed', 'deleted'], default: 'pending' },
+        message: { type: String, default: '' },
         processedAt: { type: Date, default: null },
         deletedAt: { type: Date, default: null },
         data: {
