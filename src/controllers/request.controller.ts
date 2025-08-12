@@ -121,7 +121,7 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
     };
     if (type) filter.type = type;
 
-    const requests = await RequestModel.find(filter).populate('courseId').populate('userId');
+    const requests = await RequestModel.find(filter).populate('courseId').populate('userId').populate('businessId');
 
     if (!requests.length) return next(new ErrorHandler('No pending requests found', 404));
 
@@ -498,7 +498,23 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
         userId: createdBy,
         type: 'business_verification',
         status: 'pending',
-        message: `Request to verify business "${businessName}".`
+        message: `Request to verify business "${businessName}".`,
+        data: {
+            businessName,
+            description,
+            taxCode,
+            email,
+            address,
+            businessSector,
+            logo: logoUrl,
+            docImages: docImageUrls,
+            representative: {
+                name: representativeName,
+                phone: representativePhone,
+                email: representativeEmail,
+                address: representativeAddress
+            }
+        }
     });
 
     res.status(201).json({
@@ -508,6 +524,22 @@ export const createBusinessVerificationRequest = catchAsync(async (req: Request,
             business: newBusiness
         }
     });
+});
+
+// Get a single request by ID (Admin only)
+export const getRequestById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { requestId } = req.params;
+
+    if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
+
+    const request = await RequestModel.findById(requestId)
+        .populate('courseId')
+        .populate('userId')
+        .populate('businessId');
+
+    if (!request) return next(new ErrorHandler('Request not found', 404));
+
+    res.status(200).json({ success: true, data: request });
 });
 
 // Get a single request by userId and request type
@@ -547,8 +579,8 @@ export const handleRequestActionBusiness = catchAsync(async (req: Request, res: 
     request.status = action === 'approve' ? 'approved' : 'rejected';
     await request.save();
 
-    // Tìm business theo userId đã tạo
-    const business = await BusinessModel.findOne({ createdBy: request.userId });
+    // Tìm business theo businessId trong request
+    const business = await BusinessModel.findById(request.businessId);
     if (!business) return next(new ErrorHandler('Business not found', 404));
 
     // Nếu approve thì cập nhật isVerified

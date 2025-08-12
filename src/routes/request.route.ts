@@ -13,7 +13,8 @@ import {
     cleanupProcessedRequests,
     forceCleanupAllRequests,
     forceCleanupDeletedRequests,
-    getRequestStatistics
+    getRequestStatistics,
+    getRequestById
 } from '../controllers/request.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
@@ -141,6 +142,28 @@ router.get(
     authorizeRoles('instructor'),
     getCourseApprovalRequestByCourseId
 );
+
+/**
+ * @swagger
+ * /api/request/{requestId}:
+ *   get:
+ *     summary: Get a single request by ID (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Request details
+ *       404:
+ *         description: Request not found
+ */
+router.get('/:requestId', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getRequestById);
 
 /**
  * @swagger
