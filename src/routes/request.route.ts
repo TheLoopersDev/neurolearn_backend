@@ -15,10 +15,10 @@ import {
     forceCleanupDeletedRequests,
     getRequestStatistics
 } from '../controllers/request.controller';
-import { isAuthenticated } from '@/middlewares/auth/isAuthenticated';
-import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
-import { updateAccessToken } from '@/controllers/user.controller';
-import { businessUpload, instructorUpload } from '@/middlewares/upload';
+import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
+import { updateAccessToken } from '../controllers/user.controller';
+import { businessUpload, instructorUpload } from '../middlewares/upload';
 
 /**
  * @swagger
