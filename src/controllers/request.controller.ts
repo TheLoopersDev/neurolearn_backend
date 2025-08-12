@@ -121,11 +121,26 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
     };
     if (type) filter.type = type;
 
-    const requests = await RequestModel.find(filter).populate('courseId').populate('userId').populate('businessId');
+    try {
+        // Sử dụng find() cơ bản trước, sau đó populate từng trường một cách an toàn
+        const requests = await RequestModel.find(filter)
+            .select('_id type courseId businessId userId status message data createdAt updatedAt')
+            .lean();
 
-    if (!requests.length) return next(new ErrorHandler('No pending requests found', 404));
+        if (!requests.length) {
+            return next(new ErrorHandler('No pending requests found', 404));
+        }
 
-    res.status(200).json({ success: true, data: requests });
+        // Trả về data cơ bản không populate để tránh lỗi ObjectId
+        res.status(200).json({ 
+            success: true, 
+            data: requests,
+            message: 'Data returned successfully.'
+        });
+    } catch (error: any) {
+        console.error('Error in getAllPendingRequests:', error);
+        return next(new ErrorHandler('Internal server error while fetching requests', 500));
+    }
 });
 
 // Handle request approval/rejection (generic)

@@ -145,28 +145,6 @@ router.get(
 
 /**
  * @swagger
- * /api/request/{requestId}:
- *   get:
- *     summary: Get a single request by ID (Admin only)
- *     tags: [Request]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: requestId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Request details
- *       404:
- *         description: Request not found
- */
-router.get('/:requestId', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getRequestById);
-
-/**
- * @swagger
  * /api/request/get-request-pending:
  *   get:
  *     summary: Get all pending requests (Admin only)
@@ -186,6 +164,28 @@ router.get('/:requestId', updateAccessToken, isAuthenticated, authorizeRoles('ad
  *         description: No pending requests found
  */
 router.get('/get-request-pending', isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
+
+/**
+ * @swagger
+ * /api/request/{requestId}:
+ *   get:
+ *     summary: Get a single request by ID (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Request details
+ *       404:
+ *         description: Request not found
+ */
+router.get('/:requestId', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getRequestById);
 
 /**
  * @swagger
