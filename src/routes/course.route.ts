@@ -38,7 +38,8 @@ import {
     getInstructorReviewStats,
     getStudentStats,
     getInstructorCourseStats,
-    getLatestCourseStatus
+    getLatestCourseStatus,
+    getTopViewing
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -144,6 +145,8 @@ router.post('/search', searchCoursesAndInstructors);
  *         description: List of top rated courses
  */
 router.get('/top-courses', getTopCourses);
+
+router.get('/top-courses-viewing', getTopViewing);
 
 /**
  * @swagger
