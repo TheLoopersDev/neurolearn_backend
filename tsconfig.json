@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
         "outDir": "./dist",
-        "types": ["node", "multer"],
+        "types": ["node"],
         "sourceMap": true,
         "target": "esnext",
         "module": "commonjs",
