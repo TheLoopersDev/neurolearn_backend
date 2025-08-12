@@ -10,8 +10,7 @@ import cloudinary from 'cloudinary';
 export const createLesson = catchAsync(async (req: Request, res: Response, next) => {
     const courseId = req.params.courseId;
     const sectionId = req.params.sectionId;
-    const { title, description, videoUrl, videoLength, isFree } = req.body;
-
+    const { title, description, videoUrl, videoLength, isPublished } = req.body;
     if (!courseId || !sectionId || !title) {
         return next(new ErrorHandler('Course ID, Section ID, and title are required', 400));
     }
@@ -29,7 +28,7 @@ export const createLesson = catchAsync(async (req: Request, res: Response, next)
         description,
         videoUrl,
         videoLength,
-        isFree,
+        isPublished: true,
         sectionId,
         courseId,
         order: currentLessonCount + 1
@@ -47,7 +46,7 @@ export const createLesson = catchAsync(async (req: Request, res: Response, next)
             description,
             videoUrl,
             videoLength,
-            isFree,
+            isPublished,
             order: lesson.order,
             sectionId,
             courseId
