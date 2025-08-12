@@ -12,7 +12,7 @@ import sendMail from '../utils/sendMail';
 
 dotenv.config();
 
-const clientUrl = process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'http://localhost:3000';
+const clientUrl = process.env.NODE_ENV === 'production' ? process.env.ORIGIN : 'http://localhost:3000';
 
 // =======================
 // Tạo link thanh toán PayOS

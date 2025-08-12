@@ -78,7 +78,7 @@ export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response,
             data: {
                 businessName: business.businessName,
                 role,
-                registerLink: `${process.env.CLIENT_URL}`
+                registerLink: `${process.env.ORIGIN}`
             }
         });
 
@@ -171,7 +171,7 @@ export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Res
                 data: {
                     businessName: business.businessName,
                     role,
-                    registerLink: `${process.env.CLIENT_URL}`
+                    registerLink: `${process.env.ORIGIN}`
                 }
             });
 
