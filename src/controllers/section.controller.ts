@@ -77,30 +77,28 @@ export const updateSection = catchAsync(async (req: Request, res: Response, next
 export const deleteSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const sectionId = req.params.sectionId;
 
-    // Kiểm tra xem sectionId có được truyền vào không
     if (!sectionId) {
         return next(new ErrorHandler('Section ID is required', 400));
     }
 
-    // Tìm section trong bảng Section
+    // Tìm section
     const section = await SectionModel.findById(sectionId);
     if (!section) {
         return next(new ErrorHandler('Section not found', 404));
     }
 
-    // Xóa section trong bảng Section
+    // Xóa section
     await section.deleteOne();
 
-    // Cập nhật bảng Course để xóa sectionId khỏi mảng sections
-    await CourseModel.updateMany(
-        { sections: sectionId },
-        { $pull: { sections: sectionId } } // Loại bỏ sectionId khỏi mảng sections
-    );
+    // Xóa tất cả quiz thuộc section này
+    await QuizModel.deleteMany({ sectionId });
 
-    // Trả về kết quả sau khi xóa
+    // Xóa sectionId khỏi tất cả course chứa nó
+    await CourseModel.updateMany({ sections: sectionId }, { $pull: { sections: sectionId } });
+
     res.status(200).json({
         success: true,
-        message: 'Section deleted successfully'
+        message: 'Section and related quizzes deleted successfully'
     });
 });
 
