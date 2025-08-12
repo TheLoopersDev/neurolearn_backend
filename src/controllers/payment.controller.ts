@@ -37,7 +37,7 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
 
         const returnUrl =
             userType === 'business'
-                ? `${clientUrl}/business/dashboard/purchase-history/${orderCode}`
+                ? `${clientUrl}/business/purchase-history/${orderCode}`
                 : `${clientUrl}/dashboard/purchase-history/${orderCode}`;
 
         const paymentLinkRes = await payos.createPaymentLink({
