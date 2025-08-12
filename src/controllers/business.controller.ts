@@ -4,7 +4,7 @@ import ErrorHandler from '../utils/ErrorHandler';
 import UserModel from '../models/User.model';
 import BusinessModel from '../models/Business.model';
 import sendMail from '../utils/sendMail';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import fs from 'fs';
 import CourseModel from '../models/Course.model';
 import ProgressModel from '../models/Progress.model';
@@ -106,9 +106,20 @@ export const importEmployeesFromExcel = catchAsync(async (req: Request, res: Res
     const business = await BusinessModel.findById(businessId);
     if (!business) return next(new ErrorHandler('Business not found', 404));
 
-    const workbook = XLSX.readFile(file.path);
-    const sheetName = workbook.SheetNames[0];
-    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(file.path);
+    const sheet = workbook.getWorksheet(1);
+    
+    const data: any[] = [];
+    sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) { // Skip header row
+            const email = row.getCell(1).value?.toString().trim().toLowerCase();
+            const role = row.getCell(2).value?.toString().toLowerCase() || 'employee';
+            if (email) {
+                data.push({ email, role });
+            }
+        }
+    });
 
     let success = 0,
         invited = 0,

@@ -13,18 +13,6 @@
             "dom",
             "esnext"
         ],
-        "types": [
-            "node",
-            "express",
-            "multer",
-            "jsonwebtoken",
-            "bcryptjs",
-            "nodemailer",
-            "ejs",
-            "morgan",
-            "cookie-parser",
-            "node-cron"
-        ],
         "allowJs": true,
         "rootDir": ".",
         "removeComments": true,
@@ -40,7 +28,7 @@
         "typeRoots": [
             "./src/types",
             "./node_modules/@types"
-        ],
+        ]
     },
     "include": [
         "./**/*"
