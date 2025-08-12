@@ -11,7 +11,7 @@ import { invalidateQuizzesCache } from './quiz.controller';
 
 export const createSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.courseId;
-    const { title, description } = req.body;
+    const { title, description, isPublished } = req.body;
 
     if (!courseId || !title) {
         return next(new ErrorHandler('Course ID and section title are required', 400));
@@ -27,6 +27,7 @@ export const createSection = catchAsync(async (req: Request, res: Response, next
         title,
         description,
         courseId,
+        isPublished,
         order: currentSectionCount + 1
     });
 
