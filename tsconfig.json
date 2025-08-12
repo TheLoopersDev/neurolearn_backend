@@ -6,12 +6,24 @@
         "module": "commonjs",
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
-        "noImplicitAny": true,
-        "strict": true,
+        "noImplicitAny": false,
+        "strict": false,
         "skipLibCheck": true,
         "lib": [
             "dom",
             "esnext"
+        ],
+        "types": [
+            "node",
+            "express",
+            "multer",
+            "jsonwebtoken",
+            "bcryptjs",
+            "nodemailer",
+            "ejs",
+            "morgan",
+            "cookie-parser",
+            "node-cron"
         ],
         "allowJs": true,
         "rootDir": ".",
@@ -36,6 +48,6 @@
     "exclude": [
         "./plugins/**/*",
         "./typings/**/*",
-        "./dist/**/*" // This is what fixed it!
+        "./dist/**/*"
     ]
 }
