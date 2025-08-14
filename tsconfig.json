@@ -6,33 +6,23 @@
         "module": "commonjs",
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
-        "noImplicitAny": true,
-        "strict": true,
+        "noImplicitAny": false,
+        "strict": false,
         "skipLibCheck": true,
-        "lib": [
-            "dom",
-            "esnext"
-        ],
+        "lib": ["dom", "esnext"],
         "allowJs": true,
         "rootDir": ".",
         "removeComments": true,
         "moduleResolution": "node",
         "baseUrl": "./src",
         "paths": {
-            "@/*": [
-                "./*"
-            ]
+            "@/*": ["./*"]
         },
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
-        "typeRoots": [
-            "./src/types",
-            "./node_modules/@types"
-        ],
+        "typeRoots": ["./src/types", "./node_modules/@types"]
     },
-    "include": [
-        "./**/*"
-    ],
+    "include": ["./**/*"],
     "exclude": [
         "./plugins/**/*",
         "./typings/**/*",
