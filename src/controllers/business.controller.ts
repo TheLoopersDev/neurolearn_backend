@@ -714,7 +714,7 @@ export const getAllBusinesses = catchAsync(async (req: Request, res: Response, n
 });
 
 // Get business statistics for admin dashboard
-export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res: Response) => {
     const totalBusinesses = await BusinessModel.countDocuments({});
     const verifiedBusinesses = await BusinessModel.countDocuments({ isVerified: true });
     const unverifiedBusinesses = await BusinessModel.countDocuments({ isVerified: false });
