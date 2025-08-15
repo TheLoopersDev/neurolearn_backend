@@ -112,6 +112,7 @@ export const getCourseApprovalRequestByCourseId = catchAsync(
 // Get all pending requests (optionally filtered by type)
 export const getAllPendingRequests = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { type } = req.query;
+    
     const filter: any = { 
         status: { $in: ['pending'] }, // Only show pending requests
         $or: [
@@ -121,11 +122,19 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
     };
     if (type) filter.type = type;
 
-    const requests = await RequestModel.find(filter).populate('courseId').populate('userId').populate('businessId');
+    const requests = await RequestModel.find(filter).lean();
+    
+    if (!requests.length) {
+        return next(new ErrorHandler('No pending requests found', 404));
+    }
 
-    if (!requests.length) return next(new ErrorHandler('No pending requests found', 404));
-
-    res.status(200).json({ success: true, data: requests });
+    res.status(200).json({ 
+        success: true, 
+        data: requests,
+        metadata: {
+            total: requests.length
+        }
+    });
 });
 
 // Handle request approval/rejection (generic)
@@ -413,6 +422,10 @@ export const getRequestStatistics = catchAsync(async (req: Request, res: Respons
         });
     }
 });
+
+
+
+
 
 // Create business approval request
 
