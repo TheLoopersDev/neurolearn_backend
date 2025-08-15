@@ -65,7 +65,11 @@ export const getCartItems = async (req: Request, res: Response, next: NextFuncti
     try {
         const cart = await CartModel.findOne({ userId }).populate({
             path: 'items.courseId',
-            select: 'name price thumbnail'
+            select: 'name price thumbnail coursePackage',
+            populate: {
+                path: 'coursePackage',
+                select: 'package quantity price'
+            }
         });
         res.status(200).json({ success: true, cart });
     } catch (error) {
