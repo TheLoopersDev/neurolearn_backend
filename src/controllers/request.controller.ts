@@ -111,21 +111,45 @@ export const getCourseApprovalRequestByCourseId = catchAsync(
 
 // Get all pending requests (optionally filtered by type)
 export const getAllPendingRequests = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { type } = req.query;
+    const { type, status } = req.query;
     
     const filter: any = { 
-        status: { $in: ['pending'] }, // Only show pending requests
         $or: [
             { deletedAt: { $exists: false } },
             { deletedAt: null }
         ]
     };
+    
+    // Filter by type if provided
     if (type) filter.type = type;
+    
+    // Filter by status if provided and not 'all'
+    if (status && status !== 'all') {
+        filter.status = status;
+    } else {
+        // Default to pending if no status filter
+        filter.status = { $in: ['pending', 'approved', 'rejected'] };
+    }
 
-    const requests = await RequestModel.find(filter).lean();
+    const requests = await RequestModel.find(filter)
+        .populate('userId', 'name email avatar businessInfo socialLinks')
+        .populate({
+            path: 'userId',
+            populate: {
+                path: 'businessInfo.businessId',
+                model: 'Business',
+                select: 'name description'
+            }
+        })
+        .populate('courseId', 'name description thumbnail tags overview subTitle')
+        .lean();
     
     if (!requests.length) {
-        return next(new ErrorHandler('No pending requests found', 404));
+        return res.status(200).json({ 
+            success: false, 
+            message: 'No requests found',
+            data: []
+        });
     }
 
     res.status(200).json({ 
