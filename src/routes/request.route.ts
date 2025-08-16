@@ -163,7 +163,7 @@ router.get(
  *       404:
  *         description: No pending requests found
  */
-router.get('/get-request-pending', isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
+router.get('/get-request-pending', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
 
 /**
  * @swagger

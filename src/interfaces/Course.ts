@@ -1,5 +1,6 @@
 import mongoose, { Document, Types } from 'mongoose';
 import { UserT } from './User';
+import { ICoursePackage } from '../models/Course.model';
 
 export interface IReviewReply extends Document {
     user: UserT;
@@ -48,6 +49,7 @@ export interface ICourse extends Document {
         type: Number;
         default: 0;
     };
+    coursePackage: ICoursePackage[];
 }
 
 export interface ICoursePopulated extends Document {
