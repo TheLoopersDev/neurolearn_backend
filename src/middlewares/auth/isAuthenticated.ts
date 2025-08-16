@@ -20,19 +20,23 @@ export const isAuthenticated = catchAsync(async (req: Request, res: Response, ne
         return next(new ErrorHandler('Please login to access this resource.', 400));
     }
 
-    const decoded = jwt.verify(access_token, process.env.ACCESS_TOKEN as string) as JwtPayload;
+    try {
+        const decoded = jwt.verify(access_token, process.env.ACCESS_TOKEN as string) as JwtPayload;
 
-    if (!decoded) {
-        return next(new ErrorHandler('access token is not valid', 400));
+        if (!decoded) {
+            return next(new ErrorHandler('access token is not valid', 400));
+        }
+
+        const user = await redis.get(decoded.id);
+
+        if (!user) {
+            return next(new ErrorHandler('User not found', 400));
+        }
+
+        req.user = JSON.parse(user);
+
+        next();
+    } catch (error) {
+        return next(new ErrorHandler('Authentication failed', 400));
     }
-
-    const user = await redis.get(decoded.id);
-
-    if (!user) {
-        return next(new ErrorHandler('User not found', 400));
-    }
-
-    req.user = JSON.parse(user);
-
-    next();
 });

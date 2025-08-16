@@ -1096,46 +1096,52 @@ export const getAllCourses = catchAsync(async (req: Request, res: Response, next
 export const deleteCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
-    // Tìm khóa học trong bảng Course
+    // 1) Tìm khóa học
     const course = await CourseModel.findById(id);
     if (!course) {
         return next(new ErrorHandler('Course not found', 404));
     }
 
-    // Nếu khóa học có thumbnail, xóa nó khỏi Cloudinary
+    // 2) Kiểm tra xem đã có học viên chưa
+    const hasPurchasedUser = await UserModel.exists({ purchasedCourses: id });
+    const hasProgress = await ProgressModel.exists({ course: id });
+    const hasPurchasedCount = typeof course.purchased === 'number' && course.purchased > 0;
+
+    if (hasPurchasedUser || hasProgress || hasPurchasedCount) {
+        // Có học viên/học tiến → không cho xóa
+        return next(
+            new ErrorHandler(
+                'This course already has enrolled learners, so it cannot be deleted. Consider unpublishing it instead.',
+                409 // Conflict
+            )
+        );
+    }
+
+    // 3) Xóa media trên Cloudinary (nếu có)
     if (course?.thumbnail?.public_id) {
         await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
     }
 
-    // Xóa tất cả các section liên quan đến khóa học
+    // 4) Xóa sections & lessons của khóa
     await SectionModel.deleteMany({ course: id });
-
-    // Xóa tất cả các lesson liên quan đến các section của khóa học
     await LessonModel.deleteMany({ course: id });
 
-    // Xóa khóa học khỏi bảng Course
+    // 5) Xóa khóa học
     await course.deleteOne({ _id: id });
 
-    // Cập nhật bảng User để xóa khóa học khỏi purchasedCourses và uploadedCourses
-    await UserModel.updateMany(
-        { purchasedCourses: id }, // Tìm người dùng đã mua khóa học
-        { $pull: { purchasedCourses: id } } // Loại bỏ khóa học khỏi purchasedCourses
-    );
+    // 6) Dọn refer ở User (phòng trường hợp dữ liệu cũ)
+    await UserModel.updateMany({ purchasedCourses: id }, { $pull: { purchasedCourses: id } });
+    await UserModel.updateMany({ uploadedCourses: id }, { $pull: { uploadedCourses: id } });
 
-    await UserModel.updateMany(
-        { uploadedCourses: id }, // Tìm người dùng đã tải lên khóa học
-        { $pull: { uploadedCourses: id } } // Loại bỏ khóa học khỏi uploadedCourses
-    );
-
-    // Xóa thông tin khóa học khỏi cache Redis (nếu có)
+    // 7) Xóa cache Redis
     await redis.del(id);
 
-    // Trả về thông báo thành công
     res.status(200).json({
         success: true,
         message: 'Course, sections, and lessons deleted successfully'
     });
 });
+
 
 //get courses -- pagination
 

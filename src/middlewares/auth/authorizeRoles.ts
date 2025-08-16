@@ -1,15 +1,17 @@
-import ErrorHandler from '../../utils/ErrorHandler';
 import { NextFunction, Request, Response } from 'express';
+import { catchAsync } from '../../utils/catchAsync';
+import ErrorHandler from '../../utils/ErrorHandler';
 
 export const authorizeRoles = (...roles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
-        console.log('DEBUG authorizeRoles req.user:', req.user);
-        console.log('DEBUG authorizeRoles roles:', roles);
-        console.log('DEBUG authorizeRoles user role:', req.user?.role);
-        if (!roles.includes(req.user?.role || '')) {
-            return next(new ErrorHandler(`Role ${req.user?.role} is not allowed to access this resource`, 403));
+        if (!req.user) {
+            return next(new ErrorHandler('User not found', 400));
         }
-        console.log('DEBUG authorizeRoles passed');
+
+        if (!roles.includes(req.user.role)) {
+            return next(new ErrorHandler(`Role (${req.user.role}) is not allowed to access this resource`, 403));
+        }
+
         next();
     };
 };
