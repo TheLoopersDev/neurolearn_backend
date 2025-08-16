@@ -1,7 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface Request {
-    _id?: string;
+    _id?: mongoose.Types.ObjectId;
     courseId?: mongoose.Types.ObjectId | null;
     businessId?: mongoose.Types.ObjectId | null;
     userId: mongoose.Types.ObjectId;

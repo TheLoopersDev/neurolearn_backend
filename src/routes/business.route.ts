@@ -17,8 +17,7 @@ import {
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
 import { authorizeBusinessRoles, authorizeRoles } from '../middlewares/auth/authorizeRoles';
-import upload from '../utils/upload';
-
+import upload from '../../uploads/upload';
 const router = express.Router();
 
 /**

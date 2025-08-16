@@ -19,6 +19,12 @@ const ReviewSchema = new Schema<IReview>(
     { timestamps: true }
 );
 
+export interface ICoursePackage {
+    package: string;
+    quantity: number;
+    price: number;
+}
+
 const CourseSchema = new Schema<ICourse>(
     {
         name: { type: String, required: true },
@@ -63,7 +69,14 @@ const CourseSchema = new Schema<ICourse>(
         duration: {
             type: Number,
             default: 0
-        }
+        },
+        coursePackage: [
+            {
+                package: { type: String, required: true },
+                quantity: { type: Number, required: true },
+                price: { type: Number, required: true }
+            }
+        ]
     },
     { timestamps: true }
 );

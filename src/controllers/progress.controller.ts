@@ -359,5 +359,5 @@ export async function issueCertificateIfCompleted(
       completedAt: new Date(),
       issuedBy: 'system',
     });
-  };
+  }
 

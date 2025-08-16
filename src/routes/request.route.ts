@@ -145,6 +145,28 @@ router.get(
 
 /**
  * @swagger
+ * /api/request/get-request-pending:
+ *   get:
+ *     summary: Get all pending requests (Admin only)
+ *     tags: [Request]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [course_approval, business_verification, instructor_verification]
+ *     responses:
+ *       200:
+ *         description: List of pending requests
+ *       404:
+ *         description: No pending requests found
+ */
+router.get('/get-request-pending', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
+
+/**
+ * @swagger
  * /api/request/{requestId}:
  *   get:
  *     summary: Get a single request by ID (Admin only)
@@ -164,28 +186,6 @@ router.get(
  *         description: Request not found
  */
 router.get('/:requestId', updateAccessToken, isAuthenticated, authorizeRoles('admin'), getRequestById);
-
-/**
- * @swagger
- * /api/request/get-request-pending:
- *   get:
- *     summary: Get all pending requests (Admin only)
- *     tags: [Request]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [course_approval, business_verification, instructor_verification]
- *     responses:
- *       200:
- *         description: List of pending requests
- *       404:
- *         description: No pending requests found
- */
-router.get('/get-request-pending', isAuthenticated, authorizeRoles('admin'), getAllPendingRequests);
 
 /**
  * @swagger

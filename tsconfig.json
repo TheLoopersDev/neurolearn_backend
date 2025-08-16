@@ -1,6 +1,7 @@
 {
     "compilerOptions": {
         "outDir": "./dist",
+        "types": ["node"],
         "sourceMap": true,
         "target": "esnext",
         "module": "commonjs",
@@ -20,7 +21,8 @@
         },
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
-        "typeRoots": ["./src/types", "./node_modules/@types"]
+        "typeRoots": ["./src/types", "./node_modules/@types"],
+        "types": ["node", "express"]
     },
     "include": ["./**/*"],
     "exclude": [

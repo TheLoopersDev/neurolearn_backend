@@ -46,7 +46,7 @@ const quizSchema = new Schema<IQuiz>(
         difficulty: { type: String, enum: ['easy', 'medium', 'hard'] },
         passingScore: { type: Number },
         maxAttempts: { type: Number },
-        isPublished: { type: Boolean, default: false },
+        isPublished: { type: Boolean, default: true },
 
         // ❌ bỏ 2 field cũ để tránh rối
         // sectionOrder: { type: Number },

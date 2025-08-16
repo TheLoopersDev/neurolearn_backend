@@ -287,6 +287,7 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         subCategory: course.subCategory,
         overview: course.overview || '',
         topics: Array.isArray(course.topics) ? course.topics : [],
+        coursePackage: Array.isArray(course.coursePackage) ? course.coursePackage : [],
         totalLessons,
         durationText,
         sections: processedSections,
@@ -975,73 +976,72 @@ interface IAddReviewData {
 
 // types
 interface IAddReviewPayload {
-  rating: number;       // 1..5
-  review: string;       // comment
+    rating: number; // 1..5
+    review: string; // comment
 }
 
 export const addReview = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.user?._id?.toString();
-  const userCourseList = (req.user?.purchasedCourses || []).map((c: any) => c?.toString?.() ?? String(c));
-  const courseId = req.params.id;
+    const userId = req.user?._id?.toString();
+    const userCourseList = (req.user?.purchasedCourses || []).map((c: any) => c?.toString?.() ?? String(c));
+    const courseId = req.params.id;
 
-  // 1) Chỉ người đã mua mới được review
-  const courseExists = userCourseList.includes(courseId);
-  if (!courseExists) {
-    return next(new ErrorHandler('You are not eligible to access this course', 404));
-  }
+    // 1) Chỉ người đã mua mới được review
+    const courseExists = userCourseList.includes(courseId);
+    if (!courseExists) {
+        return next(new ErrorHandler('You are not eligible to access this course', 404));
+    }
 
-  // 2) Validate input
-  const { rating, review } = req.body as IAddReviewPayload;
-  if (typeof rating !== 'number' || rating < 1 || rating > 5) {
-    return next(new ErrorHandler('Rating must be a number from 1 to 5', 400));
-  }
+    // 2) Validate input
+    const { rating, review } = req.body as IAddReviewPayload;
+    if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+        return next(new ErrorHandler('Rating must be a number from 1 to 5', 400));
+    }
 
-  // 3) Chuẩn bị dữ liệu review
-  const reviewData = {
-    user: req.user?._id,       // ObjectId
-    rating,
-    comment: review?.trim() ?? ''
-  };
+    // 3) Chuẩn bị dữ liệu review
+    const reviewData = {
+        user: req.user?._id, // ObjectId
+        rating,
+        comment: review?.trim() ?? ''
+    };
 
-  // 4) Thêm review CHỈ khi user CHƯA review (atomic)
-  //    Nếu đã tồn tại review của user => findOneAndUpdate sẽ trả về null
-  const updatedCourse = await CourseModel.findOneAndUpdate(
-    { _id: courseId, 'reviews.user': { $ne: req.user?._id } },
-    { $push: { reviews: reviewData } },
-    { new: true, projection: { reviews: 1, name: 1, authorId: 1, rating: 1 } }
-  );
+    // 4) Thêm review CHỈ khi user CHƯA review (atomic)
+    //    Nếu đã tồn tại review của user => findOneAndUpdate sẽ trả về null
+    const updatedCourse = await CourseModel.findOneAndUpdate(
+        { _id: courseId, 'reviews.user': { $ne: req.user?._id } },
+        { $push: { reviews: reviewData } },
+        { new: true, projection: { reviews: 1, name: 1, authorId: 1, rating: 1 } }
+    );
 
-  if (!updatedCourse) {
-    // Có thể do: course không tồn tại HOẶC user đã review
-    // Kiểm tra nhanh để trả về thông điệp đúng
-    const exists = await CourseModel.exists({ _id: courseId });
-    if (!exists) return next(new ErrorHandler('Course not found', 404));
-    return next(new ErrorHandler('You have already reviewed this course', 400));
-  }
+    if (!updatedCourse) {
+        // Có thể do: course không tồn tại HOẶC user đã review
+        // Kiểm tra nhanh để trả về thông điệp đúng
+        const exists = await CourseModel.exists({ _id: courseId });
+        if (!exists) return next(new ErrorHandler('Course not found', 404));
+        return next(new ErrorHandler('You have already reviewed this course', 400));
+    }
 
-  // 5) Tính lại rating trung bình
-  const total = updatedCourse.reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 0), 0);
-  updatedCourse.rating = updatedCourse.reviews.length ? total / updatedCourse.reviews.length : 0;
-  await updatedCourse.save();
+    // 5) Tính lại rating trung bình
+    const total = updatedCourse.reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 0), 0);
+    updatedCourse.rating = updatedCourse.reviews.length ? total / updatedCourse.reviews.length : 0;
+    await updatedCourse.save();
 
-  // 6) Cập nhật cache
-  await redis.set(courseId, JSON.stringify(updatedCourse), 'EX', 604800);
+    // 6) Cập nhật cache
+    await redis.set(courseId, JSON.stringify(updatedCourse), 'EX', 604800);
 
-  // 7) Notification
-  await NotificationModel.create({
-    user: req.user?._id,
-    title: 'New Review Received',
-    message: `${req.user?.name} has given review in ${updatedCourse.name}`,
-    courseId: updatedCourse._id,
-    authorId: updatedCourse.authorId
-  });
+    // 7) Notification
+    await NotificationModel.create({
+        user: req.user?._id,
+        title: 'New Review Received',
+        message: `${req.user?.name} has given review in ${updatedCourse.name}`,
+        courseId: updatedCourse._id,
+        authorId: updatedCourse.authorId
+    });
 
-  res.status(200).json({
-    success: true,
-    course: updatedCourse
-  });
+    res.status(200).json({
+        success: true,
+        course: updatedCourse
+    });
 });
-
 
 // add reply in review
 interface IAddReviewData {
