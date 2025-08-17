@@ -5,7 +5,6 @@ import ErrorHandler from '../utils/ErrorHandler';
 export const addToCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { courseId } = req.body;
     const userId = req.user?._id;
-    const businessRole = req.user?.businessInfo?.role;
 
     if (!userId) {
         next(new ErrorHandler('User not authenticated', 401));
@@ -18,35 +17,31 @@ export const addToCart = async (req: Request, res: Response, next: NextFunction)
     }
 
     try {
-        const isBusiness = ['admin', 'manager'].includes(businessRole);
         const quantityToAdd = 1;
 
         let cart = await CartModel.findOne({ userId });
 
         if (!cart) {
+            // Nếu chưa có cart thì tạo mới
             cart = new CartModel({
                 userId,
                 items: [{ courseId, quantity: quantityToAdd }]
             });
             await cart.save();
         } else {
+            // Kiểm tra xem course đã có trong cart chưa
             const existingItem = cart.items.find((item: any) => item.courseId.toString() === courseId.toString());
 
             if (existingItem) {
-                if (isBusiness) {
-                    existingItem.quantity += quantityToAdd;
-                } else {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Course already in cart'
-                    });
-                    return;
-                }
+                res.status(400).json({
+                    success: false,
+                    message: 'Course already in cart'
+                });
+                return;
             } else {
                 cart.items.push({ courseId, quantity: quantityToAdd });
+                await cart.save();
             }
-
-            await cart.save();
         }
 
         res.status(201).json({ success: true, message: 'Added to cart successfully' });
