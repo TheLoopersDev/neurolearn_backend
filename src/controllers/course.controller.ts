@@ -207,10 +207,7 @@ import QuizModel from '../models/Quiz.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
-
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide course id', 400));
-    }
+    if (!courseId) return next(new ErrorHandler('Please provide course id', 400));
 
     const course = await CourseModel.findById(courseId)
         .populate([
@@ -228,33 +225,27 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
             },
             {
                 path: 'reviews',
-                populate: {
-                    path: 'user',
-                    select: 'name avatar'
-                }
+                populate: { path: 'user', select: 'name avatar' }
             }
         ])
         .lean<ICourseDetail>();
 
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
+    if (!course) return next(new ErrorHandler('Course not found', 404));
 
     // Tổng học sinh
     const instructorCourseIds = course.authorId?.uploadedCourses || [];
     const instructorCourses = await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean();
     const totalStudents = instructorCourses.reduce((sum, c) => sum + (c.purchased || 0), 0);
-
     const totalCourses = instructorCourseIds.length;
 
-    // Lọc video nếu không miễn phí
+    // === CHANGED: bỏ gating videoUrl theo isFree; giữ nguyên lesson publish ===
     const processedSections = Array.isArray(course.sections)
-        ? course.sections.map((section) => ({
+        ? course.sections.map((section: any) => ({
               ...section,
               lessons: Array.isArray(section.lessons)
-                  ? section.lessons.map((lesson) => ({
-                        ...lesson,
-                        videoUrl: lesson.isFree ? lesson.videoUrl : undefined
+                  ? section.lessons.map((lesson: any) => ({
+                        ...lesson
+                        // KHÔNG còn: videoUrl: lesson.isFree ? lesson.videoUrl : undefined
                     }))
                   : []
           }))
@@ -279,7 +270,7 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         demoUrl: course.demoUrl,
         price: course.price,
         estimatedPrice: course.estimatedPrice,
-        isFree: course.isFree,
+        isFree: course.isFree, // giữ nguyên để không phá FE; có thể gỡ nếu bạn muốn
         purchased: course.purchased ?? 0,
         level: course.level?.name ?? null,
         rating: course.rating ?? 0,
@@ -303,24 +294,19 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
             courses: totalCourses
         },
         reviews: Array.isArray(course.reviews)
-            ? course.reviews.map((r) => ({
+            ? course.reviews.map((r: any) => ({
                   _id: r._id,
                   rating: r.rating,
                   comment: r.comment,
-                  user: {
-                      name: r.user?.name || '',
-                      avatar: r.user?.avatar || ''
-                  },
+                  user: { name: r.user?.name || '', avatar: r.user?.avatar || '' },
                   commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
               }))
             : []
     };
 
-    return res.status(200).json({
-        success: true,
-        courses: responseCourse
-    });
+    return res.status(200).json({ success: true, courses: responseCourse });
 });
+
 
 export const getCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -1707,7 +1693,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
 
     // 2) Lessons
     const lessons = await LessonModel.find({ sectionId: { $in: sectionIds }, isPublished: true })
-        .select('_id title order videoLength isFree videoUrl sectionId')
+        .select('_id title order videoLength videoUrl sectionId')
         .lean<any[]>();
 
     // 3) Quizzes (+ những field cần cho progress)
@@ -1836,10 +1822,12 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         const sid = String(section._id);
         const doneSet = completedMap.get(sid) ?? new Set<string>();
 
+        // Không còn phụ thuộc isFree; luôn trả videoUrl cho lesson đã publish
         const secLessons = (lessonsBySection[sid] || []).map((l: any) => ({
             ...l,
-            isCompleted: doneSet.has(String(l._id)),
-            videoUrl: l.isFree ? l.videoUrl : undefined
+            isCompleted: doneSet.has(String(l._id))
+            // CHANGED: bỏ gating videoUrl theo isFree
+            // videoUrl: l.isFree ? l.videoUrl : undefined
         }));
 
         const secQuizzes = (quizzesBySection[sid] || []).map((q: any) => {
@@ -1847,7 +1835,6 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             const title = q.name ?? q.examTitle ?? 'Untitled quiz';
             return {
                 ...q,
-                // ✅ các cờ FE đang dùng
                 isCompleted: !!qp,
                 isPassed: !!qp?.isPassed,
                 lastScore: qp?.lastScore ?? null,
@@ -1859,7 +1846,6 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             };
         });
 
-        // MIX + sort
         const lessonItems = secLessons.map((l: any) => ({
             kind: 'lesson' as const,
             _id: l._id,
