@@ -204,6 +204,7 @@ import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
 import ProgressModel from '../models/Progress.model';
 import QuizModel from '../models/Quiz.model';
+import RequestModel from '@/models/Request.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -1078,55 +1079,100 @@ export const getAllCourses = catchAsync(async (req: Request, res: Response, next
 ]);
 
 // delete course -- for admin
-
 export const deleteCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
-    // 1) Tìm khóa học
-    const course = await CourseModel.findById(id);
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
-    }
+    const currentUser = req.user as any;
+    const isAdmin = currentUser?.role === 'admin'; // hoặc mở rộng ['admin','superadmin']
 
-    // 2) Kiểm tra xem đã có học viên chưa
+    const course = await CourseModel.findById(id);
+    if (!course) return next(new ErrorHandler('Course not found', 404));
+
+    // Instructor bị chặn nếu đã có học viên/progress; Admin thì được xóa
     const hasPurchasedUser = await UserModel.exists({ purchasedCourses: id });
     const hasProgress = await ProgressModel.exists({ course: id });
     const hasPurchasedCount = typeof course.purchased === 'number' && course.purchased > 0;
 
-    if (hasPurchasedUser || hasProgress || hasPurchasedCount) {
-        // Có học viên/học tiến → không cho xóa
+    if (!isAdmin && (hasPurchasedUser || hasProgress || hasPurchasedCount)) {
         return next(
             new ErrorHandler(
                 'This course already has enrolled learners, so it cannot be deleted. Consider unpublishing it instead.',
-                409 // Conflict
+                409
             )
         );
     }
 
-    // 3) Xóa media trên Cloudinary (nếu có)
-    if (course?.thumbnail?.public_id) {
-        await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
+    // --- BẮT ĐẦU TRANSACTION ---
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+
+        // Xóa media trên Cloudinary (nếu có)
+        if (course?.thumbnail?.public_id) {
+            await cloudinary.v2.uploader.destroy(course.thumbnail.public_id);
+        }
+        if ((course as any)?.demoUrl?.public_id) {
+            await cloudinary.v2.uploader.destroy((course as any).demoUrl.public_id);
+        }
+
+        // Lấy danh sách sectionIds thuộc course an toàn
+        let sectionIds: mongoose.Types.ObjectId[] = [];
+        if (Array.isArray((course as any).sections) && (course as any).sections.length) {
+            sectionIds = (course as any).sections as mongoose.Types.ObjectId[];
+        } else {
+            const secs = await SectionModel.find({ $or: [{ courseId: course._id }, { course: course._id }] }, '_id')
+                .session(session)
+                .lean();
+            sectionIds = secs.map((s) => s._id as mongoose.Types.ObjectId);
+        }
+
+        // Xóa lessons/quizzes theo sectionId đúng chuẩn
+        if (sectionIds.length) {
+            await LessonModel.deleteMany({ sectionId: { $in: sectionIds } }).session(session);
+            if (typeof QuizModel?.deleteMany === 'function') {
+                await QuizModel.deleteMany({ sectionId: { $in: sectionIds } }).session(session);
+            }
+            await SectionModel.deleteMany({ _id: { $in: sectionIds } }).session(session);
+        }
+
+        // Xóa progress của course (nếu admin cho phép xóa)
+        await ProgressModel.deleteMany({ course: course._id }).session(session);
+
+        // Xóa Course
+        await CourseModel.deleteOne({ _id: course._id }).session(session);
+
+        // Dọn refer ở User
+        await UserModel.updateMany(
+            { purchasedCourses: course._id },
+            { $pull: { purchasedCourses: course._id } }
+        ).session(session);
+        await UserModel.updateMany({ uploadedCourses: course._id }, { $pull: { uploadedCourses: course._id } }).session(
+            session
+        );
+
+        // Xóa các request duyệt liên quan đến course (nếu có)
+        if (typeof RequestModel?.deleteMany === 'function') {
+            await RequestModel.deleteMany({ courseId: course._id }).session(session);
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        // Xóa cache Redis
+        await redis.del(String(course._id));
+
+        return res.status(200).json({
+            success: true,
+            message: 'Course, sections, lessons (and related records) deleted successfully'
+        });
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+        return next(new ErrorHandler('Failed to delete course safely', 500));
     }
-
-    // 4) Xóa sections & lessons của khóa
-    await SectionModel.deleteMany({ course: id });
-    await LessonModel.deleteMany({ course: id });
-
-    // 5) Xóa khóa học
-    await course.deleteOne({ _id: id });
-
-    // 6) Dọn refer ở User (phòng trường hợp dữ liệu cũ)
-    await UserModel.updateMany({ purchasedCourses: id }, { $pull: { purchasedCourses: id } });
-    await UserModel.updateMany({ uploadedCourses: id }, { $pull: { uploadedCourses: id } });
-
-    // 7) Xóa cache Redis
-    await redis.del(id);
-
-    res.status(200).json({
-        success: true,
-        message: 'Course, sections, and lessons deleted successfully'
-    });
 });
+
+
 
 
 //get courses -- pagination

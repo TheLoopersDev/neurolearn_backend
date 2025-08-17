@@ -7,6 +7,8 @@ import UserModel from '../models/User.model';
 import sendMail from '../utils/sendMail';
 import BusinessModel from '../models/Business.model';
 import { v2 as cloudinary } from 'cloudinary';
+import SectionModel from '@/models/Section.model';
+import LessonModel from '@/models/Lesson.model';
 
 // Utility function to find request with fallback methods
 const findRequestWithFallback = async (requestId: string) => {
@@ -53,48 +55,188 @@ const findRequestWithFallback = async (requestId: string) => {
 
     console.log('=== findRequestWithFallback END ===');
     console.log('Final result:', request ? `Found request ${request._id}` : 'Not found');
-    
+
     return request;
 };
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req, res, next) => {
-    const userId = req.user._id;
-    const { courseId, message } = req.body;
-
+    const userId = req.user?._id;
     if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
+
+    let { courseId, message, courseSnapshot, sectionsSnapshot, thumbnailUrl } = (req.body || {}) as any;
+
+    // Parse nếu phía FE lỡ gửi string
+    if (typeof courseSnapshot === 'string') {
+        try {
+            courseSnapshot = JSON.parse(courseSnapshot);
+        } catch {}
+    }
+    if (typeof sectionsSnapshot === 'string') {
+        try {
+            sectionsSnapshot = JSON.parse(sectionsSnapshot);
+        } catch {}
+    }
+
+    // fallback khi FE đính trong snapshot
+    if (!courseId) courseId = courseSnapshot?._id || courseSnapshot?.courseId;
     if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
 
-    const existingRequest = await RequestModel.findOne({
-        courseId,
-        userId,
-        type: 'course_approval'
-    });
+    // 1) Tải course từ DB
+    const courseDoc = await CourseModel.findById(courseId);
+    if (!courseDoc) return next(new ErrorHandler('Course not found', 404));
 
-    if (existingRequest) {
-        // Nếu đang pending -> chỉ update message
-        existingRequest.status = 'pending';
-        if (message) existingRequest.message = message;
-        await existingRequest.save();
+    // 2) (Tuỳ chọn) đồng bộ 1 số field cơ bản từ snapshot vào Course để UI đọc qua courseId là đúng ngay
+    if (courseSnapshot && typeof courseSnapshot === 'object') {
+        const fields = [
+            'name',
+            'subTitle',
+            'description',
+            'overview',
+            'level',
+            'category',
+            'subCategory',
+            'price',
+            'estimatedPrice',
+            'duration',
+            'topics',
+            'benefits',
+            'prerequisites',
+            'isDraft',
+            'isPublished',
+            'isFree',
+            'demoUrl'
+        ];
+        for (const k of fields) if (courseSnapshot[k] !== undefined) (courseDoc as any)[k] = courseSnapshot[k];
 
-        return res.status(200).json({
-            success: true,
-            data: existingRequest,
-            message: 'Existing course approval request updated to pending'
+        const snapThumb =
+            thumbnailUrl ||
+            courseSnapshot.thumbnailUrl ||
+            (typeof courseSnapshot.thumbnail === 'string' ? courseSnapshot.thumbnail : courseSnapshot.thumbnail?.url);
+
+        if (snapThumb) {
+            (courseDoc as any).thumbnail =
+                typeof (courseDoc as any).thumbnail === 'object'
+                    ? { ...((courseDoc as any).thumbnail || {}), url: snapThumb }
+                    : { url: snapThumb };
+        }
+        await courseDoc.save();
+    }
+
+    // 3) Xây sectionsSnapshot từ DB (ĐÚNG QUAN HỆ)
+    //    - Ưu tiên dùng courseDoc.sections nếu có
+    let sectionDocs: any[] = [];
+    if (Array.isArray((courseDoc as any).sections) && (courseDoc as any).sections.length) {
+        sectionDocs = await SectionModel.find({ _id: { $in: (courseDoc as any).sections } })
+            .select('_id title order isPublished')
+            .sort({ order: 1 })
+            .lean();
+    } else {
+        // fallback theo khóa ngoại trong Section: course hoặc courseId
+        sectionDocs = await SectionModel.find({ $or: [{ course: courseId }, { courseId }] })
+            .select('_id title order isPublished')
+            .sort({ order: 1 })
+            .lean();
+    }
+
+    const sectionIds = sectionDocs.map((s) => s._id);
+
+    // Lấy tất cả lesson theo sectionId (KHÔNG query theo course nữa)
+    const lessonDocs = sectionIds.length
+        ? await LessonModel.find({ sectionId: { $in: sectionIds } })
+              .select('_id title order isPublished videoLength videoUrl sectionId')
+              .sort({ order: 1 })
+              .lean()
+        : [];
+
+    // gom lesson theo section
+    const lessonsBySection = new Map<string, any[]>();
+    for (const l of lessonDocs) {
+        const sid = String(l.sectionId);
+        if (!lessonsBySection.has(sid)) lessonsBySection.set(sid, []);
+        lessonsBySection.get(sid)!.push({
+            _id: l._id,
+            title: l.title,
+            order: l.order,
+            isPublished: !!l.isPublished,
+            videoLength: l.videoLength,
+            videoUrl: l.videoUrl // không gate isFree nữa
         });
     }
 
-    // Nếu chưa có -> tạo mới
-    const newRequest = await RequestModel.create({
-        courseId,
+    // build snapshot cuối cùng (luôn từ DB để đủ thông tin)
+    const sectionsSnapshotFromDb = sectionDocs.map((s) => ({
+        _id: s._id,
+        title: s.title,
+        order: s.order,
+        isPublished: !!s.isPublished,
+        lessons: lessonsBySection.get(String(s._id)) || []
+    }));
+
+    // Nếu FE gửi sectionsSnapshot thì vẫn có thể merge/ưu tiên DB tuỳ bạn:
+    sectionsSnapshot = sectionsSnapshotFromDb;
+
+    // 4) Chặn request pending trùng
+    const existed = await RequestModel.findOne({
         userId,
+        courseId,
+        type: 'course_approval',
+        status: 'pending'
+    });
+    if (existed) return next(new ErrorHandler('A course approval request is already pending.', 400));
+
+    // 5) Tạo request mới + nhúng snapshot
+    const newReq = await RequestModel.create({
+        userId,
+        courseId,
         type: 'course_approval',
         status: 'pending',
-        message
+        message: message || `Request to approve course`,
+        data: {
+            course: courseSnapshot || {
+                // fallback tối thiểu từ courseDoc để audit
+                _id: courseDoc._id,
+                name: courseDoc.name,
+                subTitle: courseDoc.subTitle,
+                description: courseDoc.description,
+                overview: courseDoc.overview,
+                price: courseDoc.price,
+                estimatedPrice: courseDoc.estimatedPrice,
+                duration: courseDoc.duration,
+                topics: (courseDoc as any).topics || (courseDoc as any).tags || [],
+                isPublished: (courseDoc as any).isPublished,
+                isDraft: (courseDoc as any).isDraft
+            },
+            sections: sectionsSnapshot
+        }
     });
 
-    res.status(201).json({ success: true, data: newRequest });
+    // 6) Populate để UI (CoursePreviewModal) đọc trực tiếp selectedRequest.courseId.sections.lessons
+    const populated = await RequestModel.findById(newReq._id)
+        .populate({
+            path: 'courseId',
+            select: 'name subTitle description overview topics tags thumbnail price estimatedPrice duration isPublished updatedAt sections',
+            populate: {
+                path: 'sections',
+                select: '_id title order isPublished lessons',
+                options: { sort: { order: 1 } },
+                populate: {
+                    path: 'lessons',
+                    select: '_id title order isPublished videoLength videoUrl',
+                    options: { sort: { order: 1 } }
+                }
+            }
+        })
+        .populate({ path: 'userId', select: 'name email avatar' })
+        .lean();
+
+    return res.status(201).json({
+        success: true,
+        message: 'Course approval request has been submitted.',
+        data: populated
+    });
 });
+
 
 // Get request by course ID (for course_approval)
 export const getCourseApprovalRequestByCourseId = catchAsync(

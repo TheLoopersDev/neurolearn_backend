@@ -27,5 +27,4 @@ export interface ILesson extends Document {
     suggestion?: string;
     questions?: IComment[];
     isPublished?: boolean;
-    isFree?: boolean;
 }
