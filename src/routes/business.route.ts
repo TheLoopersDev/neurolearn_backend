@@ -12,7 +12,8 @@ import {
     removeEmployeeFromBusiness,
     upgradeEmployeeRole,
     getAllBusinesses,
-    getBusinessStatisticsForAdmin
+    getBusinessStatisticsForAdmin,
+    updateBusinessInfo
 } from '../controllers/business.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
@@ -246,6 +247,15 @@ router.post(
  *         description: Unauthorized
  */
 router.get('/me', updateAccessToken, isAuthenticated, authorizeBusinessRoles('admin', 'manager'), getBusinessById);
+
+// Update business info (name, logo) - admin only
+router.put(
+    '/me',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeBusinessRoles('admin'),
+    updateBusinessInfo
+);
 
 /**
  * @swagger
