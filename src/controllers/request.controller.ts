@@ -7,8 +7,8 @@ import UserModel from '../models/User.model';
 import sendMail from '../utils/sendMail';
 import BusinessModel from '../models/Business.model';
 import { v2 as cloudinary } from 'cloudinary';
-import SectionModel from '@/models/Section.model';
-import LessonModel from '@/models/Lesson.model';
+import SectionModel from '../models/Section.model';
+import LessonModel from '../models/Lesson.model';
 
 // Utility function to find request with fallback methods
 const findRequestWithFallback = async (requestId: string) => {
