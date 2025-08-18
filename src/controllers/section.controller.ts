@@ -312,12 +312,17 @@ export const getSectionDetail = catchAsync(async (req: Request, res: Response, n
 
 // PATCH /api/sections/:id/add-quiz
 // body: { quizId: string, position?: number }
-export const addQuizToSection = catchAsync(async (req, res, next) => {
-    const sectionId = req.params.id;
+export const addQuizToSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const sectionId = (req.params as any)?.sectionId || (req.params as any)?.id || (req.body as any)?.sectionId;
+
     const { quizId, position } = req.body as { quizId: string; position?: number | string };
 
-    if (!mongoose.Types.ObjectId.isValid(sectionId)) return next(new ErrorHandler('Invalid sectionId', 400));
-    if (!mongoose.Types.ObjectId.isValid(quizId)) return next(new ErrorHandler('Invalid quizId', 400));
+    if (!mongoose.Types.ObjectId.isValid(sectionId)) {
+        return next(new ErrorHandler('Invalid sectionId', 400));
+    }
+    if (!mongoose.Types.ObjectId.isValid(quizId)) {
+        return next(new ErrorHandler('Invalid quizId', 400));
+    }
 
     const section = await SectionModel.findById(sectionId);
     if (!section) return next(new ErrorHandler('Section not found', 404));
@@ -325,74 +330,64 @@ export const addQuizToSection = catchAsync(async (req, res, next) => {
     let quiz = await QuizModel.findById(quizId);
     if (!quiz) return next(new ErrorHandler('Quiz not found', 404));
 
-    // ❗Không add trùng trong chính section này (phòng trường hợp gọi lại)
-    if (quiz.sectionId && quiz.sectionId.toString() === section._id.toString()) {
-        return next(new ErrorHandler('This quiz is already in this section.', 409));
+    // ❗ Không add trùng trong chính section này
+    if (quiz.sectionId && String(quiz.sectionId) === String(section._id)) {
+        const err = new ErrorHandler('This quiz is already in this section.', 409);
+        (err as any).code = 'QUIZ_ALREADY_IN_SECTION';
+        return next(err);
     }
 
-    // 🧠 Nếu quiz đã thuộc cùng course, nhưng đang nằm ở section khác -> không cho add lại
-    if (quiz.courseId && quiz.courseId.toString() === section.courseId.toString()) {
-        if (quiz.sectionId && quiz.sectionId.toString() !== section._id.toString()) {
-            return next(new ErrorHandler('This quiz is already attached to another section in this course.', 409));
+    // 🧠 Quiz đã thuộc cùng course nhưng ở section khác → chặn
+    if (quiz.courseId && String(quiz.courseId) === String(section.courseId)) {
+        if (quiz.sectionId && String(quiz.sectionId) !== String(section._id)) {
+            const err = new ErrorHandler('This quiz is already attached to another section in this course.', 409);
+            (err as any).code = 'QUIZ_ALREADY_IN_COURSE_OTHER_SECTION';
+            return next(err);
         }
-        // Trường hợp đã cùng course nhưng chưa attach section → cho phép gắn vào bên dưới
+        // Trường hợp cùng course nhưng chưa attach section -> cho phép gắn bên dưới
     }
 
-    // 🪄 Nếu quiz thuộc course khác nhưng bạn muốn 1 quiz xuất hiện ở nhiều course
-    // -> clone quiz thành document mới để không ảnh hưởng course cũ
-    if (quiz.courseId && quiz.courseId.toString() !== section.courseId.toString()) {
-        const src = quiz.toObject();
-        // Những field KHÔNG nên copy y nguyên
-        delete (src as any)._id;
-        delete (src as any).createdAt;
-        delete (src as any).updatedAt;
-        // Nếu có các field không nên nhân bản:
-        src.userScores = []; // reset lịch sử làm bài
-        // Gán sang course/section mới
-        src.courseId = section.courseId;
-        src.sectionId = section._id;
-        // order sẽ set sau khi shift
-        delete (src as any).order;
-
-        quiz = new QuizModel(src);
-        // instructor: ưu tiên user hiện tại
-        if (req.user?._id) quiz.instructorId = req.user._id as any;
+    // 🚫 KHÔNG CLONE: nếu quiz thuộc course khác thì chặn
+    if (quiz.courseId && String(quiz.courseId) !== String(section.courseId)) {
+        const err = new ErrorHandler('This quiz belongs to another course and cannot be attached here.', 409);
+        (err as any).code = 'QUIZ_BELONGS_TO_OTHER_COURSE';
+        return next(err);
     }
 
     // 👉 Nếu quiz chưa có courseId (quiz "tự do") → gán course hiện tại
     if (!quiz.courseId) {
-        quiz.courseId = section.courseId;
+        quiz.courseId = section.courseId as any;
     }
 
     // Tính vị trí insert
     const [lessonCount, quizCount] = await Promise.all([
-        LessonModel.countDocuments({ sectionId }),
-        QuizModel.countDocuments({ sectionId })
+        LessonModel.countDocuments({ sectionId: section._id }),
+        QuizModel.countDocuments({ sectionId: section._id })
     ]);
     const total = lessonCount + quizCount;
 
     const insertAtRaw = typeof position === 'string' ? parseInt(position, 10) : position;
     const insertAt = typeof insertAtRaw === 'number' && insertAtRaw >= 0 && insertAtRaw <= total ? insertAtRaw : total;
 
-    // Dồn order các item phía sau (lesson + quiz)
+    // Dồn order các item phía sau (lesson + quiz) trong section
     await Promise.all([
-        LessonModel.updateMany({ sectionId, order: { $gte: insertAt } }, { $inc: { order: 1 } }),
-        QuizModel.updateMany({ sectionId, order: { $gte: insertAt } }, { $inc: { order: 1 } })
+        LessonModel.updateMany({ sectionId: section._id, order: { $gte: insertAt } }, { $inc: { order: 1 } }),
+        QuizModel.updateMany({ sectionId: section._id, order: { $gte: insertAt } }, { $inc: { order: 1 } })
     ]);
 
-    // Gắn section & order cho quiz (document hiện tại đã là quiz mới nếu clone)
-    quiz.sectionId = section._id;
+    // Gắn section & order cho quiz (không clone)
+    quiz.sectionId = section._id as any;
     quiz.order = insertAt;
 
-    if (!quiz.instructorId && req.user?._id) {
-        quiz.instructorId = req.user._id as any;
+    if (!quiz.instructorId && (req as any).user?._id) {
+        quiz.instructorId = (req as any).user._id as any;
     }
 
     await quiz.save();
 
-    // (tuỳ) Nếu bạn vẫn giữ mảng section.quizzes thì sync nhẹ để tránh trùng
+    // (tuỳ) nếu Section vẫn giữ mảng quizzes -> sync tránh trùng
     if (Array.isArray((section as any).quizzes)) {
-        const exists = (section as any).quizzes.some((x: any) => x.toString() === quiz._id.toString());
+        const exists = (section as any).quizzes.some((x: any) => String(x) === String(quiz._id));
         if (!exists) {
             (section as any).quizzes.push(quiz._id);
             await section.save();
@@ -401,7 +396,9 @@ export const addQuizToSection = catchAsync(async (req, res, next) => {
 
     try {
         await invalidateQuizzesCache();
-    } catch {}
+    } catch {
+        /* ignore cache errors */
+    }
 
     res.status(200).json({
         success: true,
@@ -414,6 +411,7 @@ export const addQuizToSection = catchAsync(async (req, res, next) => {
         }
     });
 });
+
 
 // PATCH /api/sections/:id/reorder
 //FE gửi thứ tự mới: [{ kind:'lesson'|'quiz', id:'...' }, ...] → BE set order = index cho từng item tương ứng:

@@ -6,30 +6,120 @@ import { redis } from '../utils/redis';
 import { NextFunction, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import SectionModel from '../models/Section.model';
+import cloudinary from 'cloudinary';
+// data URI
+const DATA_URI_RE = /^data:(image|video|application)\/[a-zA-Z0-9.+-]+;base64,/i;
+const MEDIA_KEYS = new Set([
+    'thumbnail',
+    'image',
+    'banner',
+    'cover',
+    'avatar',
+    'poster',
+    'logo',
+    'video',
+    'file',
+    'source'
+]);
 
-export const createCourse = async (data: any, req: Request, res: Response, next: NextFunction) => {
-    const user = await UserModel.findById(req.user?._id);
-    if (!user) {
-        return next(new ErrorHandler('User is not logged in!', 400));
+function isDataUri(x: any): x is string {
+    return typeof x === 'string' && DATA_URI_RE.test(x);
+}
+
+// UPLOAD 1 chuỗi base64 -> Cloudinary
+async function uploadDataUri(dataUri: string) {
+    const cleaned = dataUri.replace(/\s/g, '');
+    const up = await cloudinary.v2.uploader.upload(cleaned, {
+        folder: 'courses',
+        resource_type: 'auto'
+    });
+    return { public_id: up.public_id, url: up.secure_url };
+}
+
+// ĐỆ QUY chuẩn hoá: bảo toàn ObjectId/Date/Buffer, xử lý key 'url' và key media
+async function normalizeDeep(node: any): Promise<any> {
+    if (Array.isArray(node)) {
+        const out: any[] = [];
+        for (let i = 0; i < node.length; i++) out.push(await normalizeDeep(node[i]));
+        return out;
     }
 
-    // Gán authorId từ user đang login
-    data.authorId = user._id;
+    // bảo toàn các kiểu đặc biệt
+    if (node instanceof Types.ObjectId || node instanceof Date || Buffer.isBuffer(node)) return node;
 
-    const courses = await CourseModel.create(data);
+    if (node && typeof node === 'object') {
+        const out: any = {};
+        for (const [k, v] of Object.entries(node)) {
+            // Đừng đụng vào các field id
+            if (k === '_id' || k === 'authorId' || k.endsWith('Id')) {
+                out[k] = v;
+                continue;
+            }
 
-    // Gán courseId vào uploadedCourses[]
-    user.uploadedCourses.push(courses._id);
-    await user.save();
+            if (typeof v === 'string' && isDataUri(v)) {
+                const uploaded = await uploadDataUri(v);
 
-    // Cập nhật Redis cache
-    await redis.set(user._id.toString(), JSON.stringify(user));
+                if (k.toLowerCase() === 'url') {
+                    // url: base64 -> chỉ lấy secure_url (String)
+                    out[k] = uploaded.url;
+                    // nếu object cha có public_id, set thêm cho tiện xoá sau
+                    if (!('public_id' in out)) out.public_id = uploaded.public_id;
+                } else if (MEDIA_KEYS.has(k.toLowerCase())) {
+                    // thumbnail/image/banner: base64 string -> đổi thành object {public_id, url}
+                    out[k] = { public_id: uploaded.public_id, url: uploaded.url };
+                } else {
+                    // field khác là string base64 -> an toàn nhất là dùng URL string
+                    out[k] = uploaded.url;
+                }
+            } else {
+                out[k] = await normalizeDeep(v);
+            }
+        }
+        return out;
+    }
 
-    res.status(201).json({
-        success: true,
-        courses
-    });
+    // string bình thường / number / boolean...
+    return node;
+}
+
+// tìm mọi path còn 'data:' (để chặn)
+function findDataUriPaths(input: any, path = '$'): string[] {
+    const rs: string[] = [];
+    if (Array.isArray(input)) {
+        input.forEach((v, i) => rs.push(...findDataUriPaths(v, `${path}[${i}]`)));
+    } else if (input && typeof input === 'object') {
+        for (const [k, v] of Object.entries(input)) rs.push(...findDataUriPaths(v, `${path}.${k}`));
+    } else if (typeof input === 'string' && input.startsWith('data:')) {
+        rs.push(path);
+    }
+    return rs;
+}
+export const createCourse = async (data: any, req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await UserModel.findById(req.user?._id);
+        if (!user) return next(new ErrorHandler('User is not logged in!', 400));
+
+        // normalize TRƯỚC, rồi mới gán authorId để không bị normalize “làm hỏng” ObjectId
+        const cleaned = await normalizeDeep(data);
+
+        const bad = findDataUriPaths(cleaned);
+        if (bad.length) return next(new ErrorHandler(`Invalid base64 at: ${bad.join(', ')}`, 400));
+
+        cleaned.authorId = user._id; // ObjectId gốc của Mongoose
+
+        const course = await CourseModel.create(cleaned);
+
+        user.uploadedCourses.push(course._id);
+        await user.save();
+        await redis.set(user._id.toString(), JSON.stringify(user));
+
+        res.status(201).json({ success: true, courses: course });
+    } catch (err: any) {
+        console.error('Create course error:', err?.message, err?.response?.error?.message);
+        return next(new ErrorHandler(err?.message || 'Create course failed', 500));
+    }
 };
+
 
 export const getAllCoursesService = async (res: Response) => {
     const courses = await CourseModel.find().sort({ createdAt: -1 });

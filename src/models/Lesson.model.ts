@@ -31,7 +31,7 @@ const LessonSchema = new Schema(
         links: [LinkSchema],
         suggestion: String,
         questions: [CommentSchema],
-        isPublished: { type: Boolean, default: true }
+        isPublished: { type: Boolean, default: false }
     },
     { timestamps: true }
 );

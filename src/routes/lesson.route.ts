@@ -14,6 +14,7 @@ import {
 } from '../controllers/lesson.controller';
 import { updateAccessToken } from '../controllers/user.controller';
 import { upload } from '../middlewares/upload';
+import { ensureLessonDeletable } from '../middlewares/ensureCourseEditable';
 
 const router = express.Router();
 
@@ -209,7 +210,13 @@ router.put('/update/:lessonId', updateAccessToken, isAuthenticated, updateLesson
  *         description: Lesson not found
  */
 
-router.delete('/delete/:lessonId', updateAccessToken, isAuthenticated, deleteLesson);
+router.delete(
+    '/delete/:lessonId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureLessonDeletable({ allowAdminOverride: true }),
+    deleteLesson
+);
 
 /**
  * ..swagger
@@ -253,7 +260,12 @@ router.delete('/delete/:lessonId', updateAccessToken, isAuthenticated, deleteLes
  *         description: Section not found
  */
 
-router.put('/reorder/:sectionId', updateAccessToken, isAuthenticated, reorderLesson);
+router.put(
+    '/reorder/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    reorderLesson
+);
 
 /**
  * ..swagger
@@ -347,4 +359,10 @@ export default router;
  *       401:
  *         description: Not authenticated
  */
-router.put('/upload-lesson-video/', updateAccessToken, isAuthenticated, upload.single("video"), uploadLessonVideo);
+router.put(
+    '/upload-lesson-video/',
+    updateAccessToken,
+    isAuthenticated,
+    upload.single('video'),
+    uploadLessonVideo
+);

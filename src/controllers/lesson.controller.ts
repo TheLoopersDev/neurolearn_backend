@@ -28,7 +28,7 @@ export const createLesson = catchAsync(async (req: Request, res: Response, next)
         description,
         videoUrl,
         videoLength,
-        isPublished: true,
+        isPublished: false,
         sectionId,
         courseId,
         order: currentLessonCount + 1

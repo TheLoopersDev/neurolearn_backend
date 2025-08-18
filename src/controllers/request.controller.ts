@@ -58,7 +58,72 @@ const findRequestWithFallback = async (requestId: string) => {
 
     return request;
 };
+// 🆕 Helper: phân loại thay đổi dựa trên isPublished
+function buildChangeMeta(normSections: Array<{
+  _id: string;
+  isPublished: boolean;
+  lessons: Array<{ _id: string; isPublished: boolean }>;
+}>) {
+  const sectionOld: string[] = [];
+  const sectionNew: string[] = [];
+  const sectionUpdatedPublished: string[] = []; // section đã publish nhưng có lesson draft
 
+  const lessonOld: string[] = [];
+  const lessonNew: string[] = [];
+  const bySection: Record<string, { oldLessons: string[]; newLessons: string[] }> = {};
+
+  for (const s of normSections) {
+    if (s.isPublished) sectionOld.push(s._id);
+    else sectionNew.push(s._id);
+
+    const oldLs: string[] = [];
+    const newLs: string[] = [];
+
+    for (const l of (s.lessons || [])) {
+      if (l.isPublished) {
+        lessonOld.push(l._id);
+        oldLs.push(l._id);
+      } else {
+        lessonNew.push(l._id);
+        newLs.push(l._id);
+      }
+    }
+
+    bySection[s._id] = { oldLessons: oldLs, newLessons: newLs };
+
+    // Published section nhưng có lesson mới (draft) => xem như "section được cập nhật"
+    if (s.isPublished && newLs.length > 0) {
+      sectionUpdatedPublished.push(s._id);
+    }
+  }
+
+  const hasDraftChanges = sectionNew.length > 0 || lessonNew.length > 0;
+
+  return {
+    summary: {
+      sections: {
+        old: sectionOld.length,            // đang live
+        newDraft: sectionNew.length,       // section mới (chưa live)
+        updatedPublished: sectionUpdatedPublished.length // section live có lesson draft
+      },
+      lessons: {
+        old: lessonOld.length,             // đang live
+        newDraft: lessonNew.length         // lesson mới (chưa live)
+      },
+      hasDraftChanges
+    },
+    sections: {
+      old: sectionOld,
+      newDraft: sectionNew,
+      updatedPublished: sectionUpdatedPublished
+    },
+    lessons: {
+      old: lessonOld,
+      newDraft: lessonNew,
+      bySection
+    }
+  };
+}
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req, res, next) => {
     const userId = req.user?._id;
@@ -66,7 +131,7 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
 
     let { courseId, message, courseSnapshot, sectionsSnapshot, thumbnailUrl } = (req.body || {}) as any;
 
-    // Parse nếu phía FE lỡ gửi string
+    // Parse nếu FE lỡ gửi string
     if (typeof courseSnapshot === 'string') {
         try {
             courseSnapshot = JSON.parse(courseSnapshot);
@@ -86,7 +151,7 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
     const courseDoc = await CourseModel.findById(courseId);
     if (!courseDoc) return next(new ErrorHandler('Course not found', 404));
 
-    // 2) (Tuỳ chọn) đồng bộ 1 số field cơ bản từ snapshot vào Course để UI đọc qua courseId là đúng ngay
+    // 2) Đồng bộ một số field cơ bản từ snapshot vào Course (để FE đọc courseId là thấy đúng ngay)
     if (courseSnapshot && typeof courseSnapshot === 'object') {
         const fields = [
             'name',
@@ -123,8 +188,7 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
         await courseDoc.save();
     }
 
-    // 3) Xây sectionsSnapshot từ DB (ĐÚNG QUAN HỆ)
-    //    - Ưu tiên dùng courseDoc.sections nếu có
+    // 3) Build sectionsSnapshot từ DB (chuẩn hoá thứ tự và shape)
     let sectionDocs: any[] = [];
     if (Array.isArray((courseDoc as any).sections) && (courseDoc as any).sections.length) {
         sectionDocs = await SectionModel.find({ _id: { $in: (courseDoc as any).sections } })
@@ -132,7 +196,6 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
             .sort({ order: 1 })
             .lean();
     } else {
-        // fallback theo khóa ngoại trong Section: course hoặc courseId
         sectionDocs = await SectionModel.find({ $or: [{ course: courseId }, { courseId }] })
             .select('_id title order isPublished')
             .sort({ order: 1 })
@@ -140,8 +203,6 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
     }
 
     const sectionIds = sectionDocs.map((s) => s._id);
-
-    // Lấy tất cả lesson theo sectionId (KHÔNG query theo course nữa)
     const lessonDocs = sectionIds.length
         ? await LessonModel.find({ sectionId: { $in: sectionIds } })
               .select('_id title order isPublished videoLength videoUrl sectionId')
@@ -149,7 +210,6 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
               .lean()
         : [];
 
-    // gom lesson theo section
     const lessonsBySection = new Map<string, any[]>();
     for (const l of lessonDocs) {
         const sid = String(l.sectionId);
@@ -160,32 +220,179 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
             order: l.order,
             isPublished: !!l.isPublished,
             videoLength: l.videoLength,
-            videoUrl: l.videoUrl // không gate isFree nữa
+            videoUrl: l.videoUrl
         });
     }
 
-    // build snapshot cuối cùng (luôn từ DB để đủ thông tin)
     const sectionsSnapshotFromDb = sectionDocs.map((s) => ({
         _id: s._id,
         title: s.title,
         order: s.order,
         isPublished: !!s.isPublished,
-        lessons: lessonsBySection.get(String(s._id)) || []
+        lessons: (lessonsBySection.get(String(s._id)) || []).sort((a, b) => a.order - b.order)
     }));
 
-    // Nếu FE gửi sectionsSnapshot thì vẫn có thể merge/ưu tiên DB tuỳ bạn:
+    // Luôn ưu tiên snapshot từ DB để chuẩn hoá
     sectionsSnapshot = sectionsSnapshotFromDb;
 
-    // 4) Chặn request pending trùng
+    // Chuẩn hoá snapshot course để so sánh
+    const normalizeCourseSnap = (snap: any) => {
+        if (!snap || typeof snap !== 'object') return {};
+        const thumb =
+            snap.thumbnailUrl ||
+            (typeof snap.thumbnail === 'string' ? snap.thumbnail : snap.thumbnail?.url) ||
+            (courseDoc as any)?.thumbnail?.url ||
+            undefined;
+
+        const pick = (o: any, keys: string[]) => {
+            const out: any = {};
+            for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+            return out;
+        };
+        const base = pick(snap, [
+            'name',
+            'subTitle',
+            'description',
+            'overview',
+            'level',
+            'category',
+            'subCategory',
+            'price',
+            'estimatedPrice',
+            'duration',
+            'topics',
+            'benefits',
+            'prerequisites',
+            'isDraft',
+            'isPublished',
+            'isFree',
+            'demoUrl'
+        ]);
+        if (thumb) base.thumbnailUrl = thumb;
+        return base;
+    };
+
+    const normalizeSectionsSnap = (secs: any[]) => {
+        return (Array.isArray(secs) ? secs : [])
+            .map((s) => ({
+                _id: String(s._id),
+                title: s.title ?? '',
+                order: Number(s.order ?? 0),
+                isPublished: !!s.isPublished,
+                lessons: (Array.isArray(s.lessons) ? s.lessons : [])
+                    .map((l: any) => ({
+                        _id: String(l._id),
+                        title: l.title ?? '',
+                        order: Number(l.order ?? 0),
+                        isPublished: !!l.isPublished,
+                        // chỉ giữ phần cần thiết để so sánh, tránh noise
+                        videoLength: l.videoLength ?? undefined,
+                        videoUrl: l?.videoUrl?.url ?? l?.videoUrl ?? undefined
+                    }))
+                    .sort((a: any, b: any) => a.order - b.order)
+            }))
+            .sort((a, b) => a.order - b.order);
+    };
+
+    const deepEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+
+    const newCourseSnap =
+        courseSnapshot && typeof courseSnapshot === 'object'
+            ? courseSnapshot
+            : {
+                  _id: courseDoc._id,
+                  name: courseDoc.name,
+                  subTitle: courseDoc.subTitle,
+                  description: courseDoc.description,
+                  overview: courseDoc.overview,
+                  price: courseDoc.price,
+                  estimatedPrice: courseDoc.estimatedPrice,
+                  duration: courseDoc.duration,
+                  topics: (courseDoc as any).topics || (courseDoc as any).tags || [],
+                  isPublished: (courseDoc as any).isPublished,
+                  isDraft: (courseDoc as any).isDraft,
+                  thumbnail: (courseDoc as any)?.thumbnail,
+                  level: (courseDoc as any)?.level,
+                  category: (courseDoc as any)?.category,
+                  subCategory: (courseDoc as any)?.subCategory,
+                  isFree: (courseDoc as any)?.isFree,
+                  demoUrl: (courseDoc as any)?.demoUrl,
+                  benefits: (courseDoc as any)?.benefits,
+                  prerequisites: (courseDoc as any)?.prerequisites
+              };
+
+    const normNewCourse = normalizeCourseSnap(newCourseSnap);
+    const normNewSections = normalizeSectionsSnap(sectionsSnapshot);
+
+    // 🆕 Tính meta thay đổi dựa trên isPublished
+    const changeMeta = buildChangeMeta(
+        normNewSections.map((s) => ({
+            _id: s._id,
+            isPublished: !!s.isPublished,
+            lessons: (s.lessons || []).map((l: any) => ({ _id: l._id, isPublished: !!l.isPublished }))
+        }))
+    );
+
+    // 4) Nếu đã có request pending -> cập nhật request hiện tại
     const existed = await RequestModel.findOne({
         userId,
         courseId,
         type: 'course_approval',
         status: 'pending'
     });
-    if (existed) return next(new ErrorHandler('A course approval request is already pending.', 400));
 
-    // 5) Tạo request mới + nhúng snapshot
+    if (existed) {
+        const currCourse = normalizeCourseSnap(existed?.data?.course || {});
+        const currSections = normalizeSectionsSnap(existed?.data?.sections || []);
+
+        const changedCourse = !deepEqual(currCourse, normNewCourse);
+        const changedSections = !deepEqual(currSections, normNewSections);
+
+        if (changedCourse || changedSections) {
+            existed.data = existed.data || {};
+            existed.data.course = newCourseSnap;
+            existed.data.sections = sectionsSnapshot;
+            // 🆕 cập nhật meta vào data của request
+            existed.data.meta = changeMeta;
+            if (message) existed.message = message;
+            existed.markModified('data');
+            await existed.save();
+
+            const populated = await RequestModel.findById(existed._id)
+                .populate({
+                    path: 'courseId',
+                    select: 'name subTitle description overview topics tags thumbnail price estimatedPrice duration isPublished updatedAt sections',
+                    populate: {
+                        path: 'sections',
+                        select: '_id title order isPublished lessons',
+                        options: { sort: { order: 1 } },
+                        populate: {
+                            path: 'lessons',
+                            select: '_id title order isPublished videoLength videoUrl',
+                            options: { sort: { order: 1 } }
+                        }
+                    }
+                })
+                .populate({ path: 'userId', select: 'name email avatar' })
+                .lean();
+
+            return res.status(200).json({
+                success: true,
+                message: 'An approval request is already pending. It has been updated with your latest changes.',
+                updated: true,
+                data: populated
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'An approval request is already pending. No changes detected.',
+            updated: false,
+            data: existed
+        });
+    }
+
+    // 5) Tạo request mới
     const newReq = await RequestModel.create({
         userId,
         courseId,
@@ -193,25 +400,13 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
         status: 'pending',
         message: message || `Request to approve course`,
         data: {
-            course: courseSnapshot || {
-                // fallback tối thiểu từ courseDoc để audit
-                _id: courseDoc._id,
-                name: courseDoc.name,
-                subTitle: courseDoc.subTitle,
-                description: courseDoc.description,
-                overview: courseDoc.overview,
-                price: courseDoc.price,
-                estimatedPrice: courseDoc.estimatedPrice,
-                duration: courseDoc.duration,
-                topics: (courseDoc as any).topics || (courseDoc as any).tags || [],
-                isPublished: (courseDoc as any).isPublished,
-                isDraft: (courseDoc as any).isDraft
-            },
-            sections: sectionsSnapshot
+            course: newCourseSnap,
+            sections: sectionsSnapshot,
+            // 🆕 đính kèm meta để BE/FE đọc ngay
+            meta: changeMeta
         }
     });
-
-    // 6) Populate để UI (CoursePreviewModal) đọc trực tiếp selectedRequest.courseId.sections.lessons
+    // 6) Populate để UI đọc trực tiếp
     const populated = await RequestModel.findById(newReq._id)
         .populate({
             path: 'courseId',
@@ -236,6 +431,7 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
         data: populated
     });
 });
+
 
 
 // Get request by course ID (for course_approval)
@@ -305,135 +501,179 @@ export const getAllPendingRequests = catchAsync(async (req: Request, res: Respon
 
 // Handle request approval/rejection (generic)
 export const handleRequestActionCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const { requestId } = req.params;
-    const { action } = req.body;
+  const { requestId } = req.params;
+  const { action } = req.body;
 
-    console.log('=== handleRequestActionCourse START ===');
-    console.log('Request ID:', requestId);
-    console.log('Action:', action);
+  console.log("=== handleRequestActionCourse START ===");
+  console.log("Request ID:", requestId);
+  console.log("Action:", action);
 
-    if (!requestId) return next(new ErrorHandler('Request ID is required', 400));
-    if (!['approve', 'reject'].includes(action)) return next(new ErrorHandler('Invalid action', 400));
+  if (!requestId) return next(new ErrorHandler("Request ID is required", 400));
+  if (!["approve", "reject"].includes(action)) return next(new ErrorHandler("Invalid action", 400));
 
-    const request = await findRequestWithFallback(requestId);
-    if (!request) return next(new ErrorHandler('Request not found', 404));
+  const request = await findRequestWithFallback(requestId);
+  if (!request) return next(new ErrorHandler("Request not found", 404));
 
-    console.log('Found request:', request._id, request.type, request.status);
+  console.log("Found request:", request._id, request.type, request.status);
 
-    request.status = action === 'approve' ? 'approved' : 'rejected';
+  // Non-course_approval -> giữ nguyên hành vi cũ
+  if (request.type !== "course_approval") {
+    request.status = action === "approve" ? "approved" : "rejected";
+    await request.save();
+    return res.status(200).json({
+      success: true,
+      message: `Request has been ${request.status}.`,
+      requestId: request._id,
+    });
+  }
+
+  // ==== course_approval flow ====
+  const course = await CourseModel.findById(request.courseId);
+  const instructor = await UserModel.findById(request.userId);
+  if (!course || !instructor) return next(new ErrorHandler("Course or Instructor not found", 404));
+
+  console.log("Found course:", course._id, course.name);
+  console.log("Found instructor:", instructor._id, instructor.name);
+
+  // Snapshot trong request để biết cái nào là draft (isPublished=false)
+  const sectionsInReq: Array<{
+    _id: any;
+    isPublished?: boolean;
+    lessons?: Array<{ _id: any; isPublished?: boolean }>;
+  }> = Array.isArray(request?.data?.sections) ? request.data.sections : [];
+
+  const sectionIdsInReq = sectionsInReq.map((s) => String(s._id)).filter(Boolean);
+
+  // Fallback: nếu snapshot rỗng (ít gặp), lấy toàn bộ section theo course
+  const fallbackSectionDocs =
+    sectionIdsInReq.length === 0
+      ? await SectionModel.find({ $or: [{ course: course._id }, { courseId: course._id }] })
+          .select("_id")
+          .lean()
+      : [];
+
+  const effectiveSectionIds = sectionIdsInReq.length
+    ? sectionIdsInReq
+    : fallbackSectionDocs.map((s: any) => String(s._id));
+
+  // Lấy danh sách draft trong snapshot
+  const draftSectionIds = sectionsInReq
+    .filter((s) => s && s._id && s.isPublished === false)
+    .map((s) => String(s._id));
+
+  const draftLessonIds = sectionsInReq.flatMap((s) =>
+    (Array.isArray(s?.lessons) ? s.lessons : [])
+      .filter((l) => l && l._id && l.isPublished === false)
+      .map((l) => String(l._id))
+  );
+
+  // Fallback nếu snapshot không có flag isPublished cho items
+  let fallbackDraftSectionIds: string[] = [];
+  let fallbackDraftLessonIds: string[] = [];
+  if (draftSectionIds.length === 0 && draftLessonIds.length === 0 && effectiveSectionIds.length) {
+    const fbSecs = await SectionModel.find({ _id: { $in: effectiveSectionIds }, isPublished: false })
+      .select("_id")
+      .lean();
+    fallbackDraftSectionIds = fbSecs.map((s) => String(s._id));
+
+    const fbLes = await LessonModel.find({ sectionId: { $in: effectiveSectionIds }, isPublished: false })
+      .select("_id")
+      .lean();
+    fallbackDraftLessonIds = fbLes.map((l) => String(l._id));
+  }
+
+  const sectionsToPublish = draftSectionIds.length ? draftSectionIds : fallbackDraftSectionIds;
+  const lessonsToPublish = draftLessonIds.length ? draftLessonIds : fallbackDraftLessonIds;
+
+  if (action === "approve") {
+    // 1) Publish course (đưa course sang live)
+    await CourseModel.findByIdAndUpdate(course._id, { isPublished: true, isDraft: false });
+
+    // 2) Publish SECTION mới (draft) có trong request
+    let sectionsModified = 0;
+    if (sectionsToPublish.length) {
+      const secRes = await SectionModel.updateMany(
+        { _id: { $in: sectionsToPublish }, isPublished: { $ne: true } },
+        { $set: { isPublished: true } }
+      );
+      // @ts-ignore
+      sectionsModified = secRes?.modifiedCount ?? secRes?.nModified ?? 0;
+    }
+
+    // 3) Publish LESSON mới (draft) có trong request (kể cả thuộc section đã publish)
+    let lessonsModified = 0;
+    if (lessonsToPublish.length) {
+      const lesRes = await LessonModel.updateMany(
+        { _id: { $in: lessonsToPublish }, isPublished: { $ne: true } },
+        { $set: { isPublished: true } }
+      );
+      // @ts-ignore
+      lessonsModified = lesRes?.modifiedCount ?? lesRes?.nModified ?? 0;
+    }
+
+    // 4) Cập nhật trạng thái request (KHÔNG xoá request)
+    request.status = "approved";
     await request.save();
 
-    console.log('Updated request status to:', request.status);
-
-    if (request.type === 'course_approval') {
-        const course = await CourseModel.findById(request.courseId);
-        const instructor = await UserModel.findById(request.userId);
-
-        if (!course || !instructor) return next(new ErrorHandler('Course or Instructor not found', 404));
-
-        console.log('Found course:', course._id, course.name);
-        console.log('Found instructor:', instructor._id, instructor.name);
-
-        if (action === 'approve') {
-            await CourseModel.findByIdAndUpdate(request.courseId, { isPublished: true });
-            console.log('Course published successfully');
-        }
-
-        try {
-            await sendMail({
-                email: instructor.email,
-                subject: action === 'approve' ? 'Your Course Has Been Approved!' : 'Your Course Has Been Rejected',
-                template: action === 'approve' ? 'approved-request-mail.ejs' : 'reject-request-mail.ejs',
-                data: {
-                    user: { name: instructor.name },
-                    courseName: course.name,
-                    rejectionReason: action === 'reject' ? 'Your course did not meet the platform requirements.' : '',
-                    courseUrl: `https://your-platform.com/courses/${course._id}`
-                }
-            });
-            console.log('Email sent successfully');
-        } catch (emailError) {
-            console.error('Email sending failed:', emailError);
-            // Continue execution even if email fails
-        }
-    }
-
-    console.log('About to delete request with ID:', requestId);
-    
-    // First, mark as deleted to prevent any race conditions
     try {
-        await RequestModel.findByIdAndUpdate(requestId, { 
-            status: 'deleted',
-            deletedAt: new Date()
-        });
-        console.log('Marked request as deleted');
-        
-        // Then try to actually delete it
-        const deleteResult = await RequestModel.deleteOne({ _id: requestId });
-        console.log('deleteOne result:', deleteResult);
-        
-        if (deleteResult.deletedCount === 0) {
-            console.log('deleteOne failed, trying findByIdAndDelete...');
-            const findAndDeleteResult = await RequestModel.findByIdAndDelete(requestId);
-            console.log('findByIdAndDelete result:', findAndDeleteResult);
-            
-            if (!findAndDeleteResult) {
-                console.log('Both deletion methods failed, keeping as deleted status...');
-            }
-        }
-    } catch (deleteError) {
-        console.error('Error during deletion:', deleteError);
-        // If deletion fails, keep as deleted status
-        try {
-            await RequestModel.findByIdAndUpdate(requestId, { 
-                status: 'deleted',
-                deletedAt: new Date()
-            });
-            console.log('Marked request as deleted due to deletion error');
-        } catch (updateError) {
-            console.error('Error marking as deleted:', updateError);
-        }
+      await sendMail({
+        email: instructor.email,
+        subject: "Your Course Has Been Approved!",
+        template: "approved-request-mail.ejs",
+        data: {
+          user: { name: instructor.name },
+          courseName: course.name,
+          rejectionReason: "",
+          courseUrl: `https://academix.id.vn/courses/${course._id}`,
+        },
+      });
+      console.log("Email sent successfully");
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError);
     }
 
-    console.log('=== handleRequestActionCourse END ===');
+    console.log(
+      `Published items -> sections: ${sectionsModified}, lessons: ${lessonsModified}`
+    );
 
-    // Final check - verify if request was actually deleted
-    try {
-        const finalCheck = await RequestModel.findById(requestId);
-        if (finalCheck) {
-            console.log('WARNING: Request still exists after deletion attempt, forcing deletion...');
-            // Try multiple deletion methods
-            let forceDeleteResult = await RequestModel.deleteOne({ _id: requestId });
-            if (forceDeleteResult.deletedCount === 0) {
-                const findAndDeleteResult = await RequestModel.findByIdAndDelete(requestId);
-                if (!findAndDeleteResult) {
-                    forceDeleteResult = { deletedCount: 0, acknowledged: true };
-                } else {
-                    forceDeleteResult = { deletedCount: 1, acknowledged: true };
-                }
-            }
-            if (forceDeleteResult.deletedCount === 0) {
-                // If still can't delete, mark as deleted and schedule cleanup
-                await RequestModel.findByIdAndUpdate(requestId, { 
-                    status: 'deleted',
-                    deletedAt: new Date()
-                });
-                console.log('Marked request as deleted for later cleanup');
-            } else {
-                console.log('Forced deletion completed');
-            }
-        } else {
-            console.log('Request successfully deleted');
-        }
-    } catch (finalCheckError) {
-        console.error('Error during final check:', finalCheckError);
-    }
-
-    res.status(200).json({
-        success: true,
-        message: `Request has been ${request.status} and email notification sent.`
+    return res.status(200).json({
+      success: true,
+      message: `Request approved. Published ${sectionsModified} section(s) and ${lessonsModified} lesson(s).`,
+      stats: { sectionsPublished: sectionsModified, lessonsPublished: lessonsModified },
+      requestId: request._id,
     });
+  }
+
+  // action === 'reject'
+  // Không đụng gì tới dữ liệu live, giữ nguyên draft để giảng viên tiếp tục sửa.
+  request.status = "rejected";
+  await request.save();
+
+  try {
+    await sendMail({
+      email: instructor.email,
+      subject: "Your Course Update Was Not Approved",
+      template: "reject-request-mail.ejs",
+      data: {
+        user: { name: instructor.name },
+        courseName: course.name,
+        rejectionReason: "Your recent updates did not meet the platform requirements.",
+        courseUrl: `https://academix.id.vn/instructor/courses/edit-course/${course._id}`,
+      },
+    });
+    console.log("Email sent successfully");
+  } catch (emailError) {
+    console.error("Email sending failed:", emailError);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Request has been rejected. Draft changes remain un-published.",
+    requestId: request._id,
+  });
 });
+
+
 
 // Cleanup processed requests (can be called by a cron job)
 export const cleanupProcessedRequests = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
