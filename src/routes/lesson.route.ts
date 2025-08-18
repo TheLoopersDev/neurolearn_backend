@@ -14,7 +14,7 @@ import {
 } from '../controllers/lesson.controller';
 import { updateAccessToken } from '../controllers/user.controller';
 import { upload } from '../middlewares/upload';
-import { ensureCourseEditable } from '@/middlewares/ensureCourseEditable';
+import { ensureLessonDeletable } from '../middlewares/ensureCourseEditable';
 
 const router = express.Router();
 
@@ -82,12 +82,7 @@ const router = express.Router();
  *         description: Course or Section not found
  */
 
-router.post(
-    '/create/:courseId/:sectionId',
-    updateAccessToken,
-    isAuthenticated,
-    createLesson
-);
+router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, createLesson);
 
 /**
  * ..swagger
@@ -189,12 +184,7 @@ router.get('/:lessonId', updateAccessToken, isAuthenticated, getLessonById);
  *         description: Lesson not found
  */
 
-router.put(
-    '/update/:lessonId',
-    updateAccessToken,
-    isAuthenticated,
-    updateLesson
-);
+router.put('/update/:lessonId', updateAccessToken, isAuthenticated, updateLesson);
 
 /**
  * ..swagger
@@ -224,7 +214,7 @@ router.delete(
     '/delete/:lessonId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
+    ensureLessonDeletable({ allowAdminOverride: true }),
     deleteLesson
 );
 

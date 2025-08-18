@@ -16,7 +16,7 @@ import {
     reorderSection,
     removeItemFromSection
 } from '../controllers/section.controller';
-import { ensureCourseEditable } from '@/middlewares/ensureCourseEditable';
+import { ensureCourseEditable } from '../middlewares/ensureCourseEditable';
 
 const router = express.Router();
 
@@ -60,12 +60,7 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post(
-    '/create/:courseId',
-    updateAccessToken,
-    isAuthenticated,
-    createSection
-);
+router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSection);
 
 /**
  * @swagger
@@ -109,12 +104,7 @@ router.post(
  *       500:
  *         description: Internal server error
  */
-router.put(
-    '/update/:id',
-    updateAccessToken,
-    isAuthenticated,
-    updateSection
-);
+router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
 
 /**
  * @swagger
@@ -147,7 +137,7 @@ router.delete(
     '/delete/:sectionId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
+    ensureCourseEditable({ allowAdminOverride: true }),
     deleteSection
 );
 
@@ -243,12 +233,7 @@ router.get('/user/', updateAccessToken, isAuthenticated, getSectionsByUserId);
  *       500:
  *         description: Internal server error
  */
-router.put(
-    '/reorder',
-    updateAccessToken,
-    isAuthenticated,
-    reorderSections
-);
+router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
 
 /**
  * @swagger
@@ -281,7 +266,7 @@ router.put(
     '/publish/:sectionId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
+    ensureCourseEditable({ allowAdminOverride: true }),
     publishSection
 );
 
@@ -316,7 +301,7 @@ router.put(
     '/unpublish/:sectionId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
+    ensureCourseEditable({ allowAdminOverride: true }),
     unpublishSection
 );
 
@@ -362,26 +347,10 @@ router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionD
  */
 // router.get('/:sectionId', isAuthenticated, getSectionDetail);
 
-router.patch(
-    '/:id/add-quiz',
-    updateAccessToken,
-    isAuthenticated,
-    addQuizToSection
-);
+router.patch('/:id/add-quiz', updateAccessToken, isAuthenticated, addQuizToSection);
 
-router.patch(
-    '/:id/reorder',
-    updateAccessToken,
-    isAuthenticated,
-    reorderSection
-);
+router.patch('/:id/reorder', updateAccessToken, isAuthenticated, reorderSection);
 
-router.patch(
-    '/:id/remove-item',
-    updateAccessToken,
-    isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
-    removeItemFromSection
-);
+router.patch('/:id/remove-item', updateAccessToken, isAuthenticated, removeItemFromSection);
 
 export default router;

@@ -6,7 +6,7 @@ import SectionModel from '../models/Section.model';
 import LessonModel from '../models/Lesson.model';
 import QuizModel from '../models/Quiz.model';
 import ErrorHandler from '../utils/ErrorHandler';
-import { catchAsync } from '@/utils/catchAsync';
+import { catchAsync } from '../utils/catchAsync';
 
 type Options = {
     allowAdminOverride?: boolean; // admin có được phép vượt chặn published không
@@ -114,6 +114,90 @@ export const ensureCourseEditable = (opts: Options = {}) => {
         }
 
         if (attachCourseOnReq) (req as any).course = course;
+        return next();
+    });
+};
+
+async function resolveLessonIdFromRequest(req: Request): Promise<string> {
+    const p = req.params as any;
+    const b = req.body as any;
+    const q = req.query as any;
+
+    const lessonId = p.lessonId || b.lessonId || q.lessonId || p.id || b.id || q.id;
+    if (!lessonId) throw new ErrorHandler('Lesson ID is required', 400);
+    if (!Types.ObjectId.isValid(lessonId)) throw new ErrorHandler('Invalid lesson id', 400);
+    return String(lessonId);
+}
+
+async function fetchLessonMinimal(lessonId: string) {
+    const lesson = await LessonModel.findById(lessonId).select('_id isPublished status sectionId');
+    if (!lesson) throw new ErrorHandler('Lesson not found', 404);
+    return lesson;
+}
+
+async function fetchParentCourseOfLesson(lesson: any) {
+    if (!lesson.sectionId) throw new ErrorHandler('Parent section not found for lesson', 404);
+    const section = await SectionModel.findById(lesson.sectionId).select('_id courseId');
+    if (!section?.courseId) throw new ErrorHandler('Parent course not found for lesson', 404);
+    const course = await CourseModel.findById(section.courseId).select('_id authorId');
+    if (!course) throw new ErrorHandler('Course not found', 404);
+    return course;
+}
+
+// ==============================
+// Public util: check published state
+// ==============================
+export async function isLessonPublished(lessonId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(lessonId)) throw new ErrorHandler('Invalid lesson id', 400);
+    const lesson = await LessonModel.findById(lessonId).select('isPublished status');
+    if (!lesson) throw new ErrorHandler('Lesson not found', 404);
+    // hỗ trợ cả schema dùng isPublished (boolean) hoặc status = 'published'
+    return (lesson as any).isPublished === true || (lesson as any).status === 'published';
+}
+
+// ==============================
+// Middleware: ensureLessonDeletable
+// - Cho phép xóa nếu lesson CHƯA publish
+// - Nếu đã publish -> chặn (trừ admin override)
+// - Kiểm tra quyền: owner course hoặc admin
+// - KHÔNG phụ thuộc ensureCourseEditable để vẫn cho phép xóa draft trên course đã publish
+// ==============================
+type LessonDeletableOptions = {
+    allowAdminOverride?: boolean; // admin được xóa lesson đã publish?
+    attachLessonOnReq?: boolean; // gắn req.lesson để handler phía sau dùng lại
+};
+
+export const ensureLessonDeletable = (opts: LessonDeletableOptions = {}) => {
+    const { allowAdminOverride = true, attachLessonOnReq = true } = opts;
+
+    return catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
+        // 1) Resolve & load lesson
+        const lessonId = await resolveLessonIdFromRequest(req);
+        const lesson = await fetchLessonMinimal(lessonId);
+
+        // 2) Quyền: phải là owner của course hoặc admin
+        const course = await fetchParentCourseOfLesson(lesson);
+        const userId = (req as any).user?._id as string | undefined;
+        const userRole = (req as any).user?.role as string | undefined;
+        const isOwner = userId && String(course.authorId) === String(userId);
+        const isAdmin = userRole === 'admin';
+        if (!isOwner && !isAdmin) {
+            return next(new ErrorHandler('Forbidden', 403));
+        }
+
+        // 3) Trạng thái publish của lesson
+        const published = (lesson as any).isPublished === true || (lesson as any).status === 'published';
+        if (published && !(allowAdminOverride && isAdmin)) {
+            const err = new ErrorHandler('Published lesson cannot be deleted.', 409);
+            (err as any).code = 'LESSON_PUBLISHED_LOCKED';
+            return next(err);
+        }
+
+        // 4) Attach để controller sau dùng (tuỳ chọn)
+        if (attachLessonOnReq) (req as any).lesson = lesson;
+        // (có thể gắn cả course nếu cần)
+        (req as any).course = (req as any).course || course;
+
         return next();
     });
 };

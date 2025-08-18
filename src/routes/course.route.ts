@@ -43,8 +43,7 @@ import {
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
-import { get } from 'http';
-import { ensureCourseEditable } from '@/middlewares/ensureCourseEditable';
+import { ensureCourseEditable } from '../middlewares/ensureCourseEditable';
 
 /**
  * @swagger
