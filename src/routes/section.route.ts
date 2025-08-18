@@ -16,6 +16,7 @@ import {
     reorderSection,
     removeItemFromSection
 } from '../controllers/section.controller';
+import { ensureCourseEditable } from '@/middlewares/ensureCourseEditable';
 
 const router = express.Router();
 
@@ -59,7 +60,13 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSection);
+router.post(
+    '/create/:courseId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    createSection
+);
 
 /**
  * @swagger
@@ -103,7 +110,13 @@ router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSecti
  *       500:
  *         description: Internal server error
  */
-router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
+router.put(
+    '/update/:id',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    updateSection
+);
 
 /**
  * @swagger
@@ -132,7 +145,13 @@ router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
  *       500:
  *         description: Internal server error
  */
-router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSection);
+router.delete(
+    '/delete/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    deleteSection
+);
 
 /**
  * @swagger
@@ -162,7 +181,6 @@ router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSe
 router.get('/course/:courseId', updateAccessToken, isAuthenticated, getAllSections);
 
 router.get('/review/:courseId', updateAccessToken, isAuthenticated, getCurriculumByCourseId);
-
 
 /**
  * @swagger
@@ -227,7 +245,13 @@ router.get('/user/', updateAccessToken, isAuthenticated, getSectionsByUserId);
  *       500:
  *         description: Internal server error
  */
-router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
+router.put(
+    '/reorder',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    reorderSections
+);
 
 /**
  * @swagger
@@ -256,7 +280,13 @@ router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
  *       500:
  *         description: Internal server error
  */
-router.put('/publish/:sectionId', updateAccessToken, isAuthenticated, publishSection);
+router.put(
+    '/publish/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    publishSection
+);
 
 /**
  * @swagger
@@ -285,7 +315,13 @@ router.put('/publish/:sectionId', updateAccessToken, isAuthenticated, publishSec
  *       500:
  *         description: Internal server error
  */
-router.put('/unpublish/:sectionId', updateAccessToken, isAuthenticated, unpublishSection);
+router.put(
+    '/unpublish/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    unpublishSection
+);
 
 /**
  * @swagger
@@ -329,10 +365,28 @@ router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionD
  */
 // router.get('/:sectionId', isAuthenticated, getSectionDetail);
 
-router.patch('/:id/add-quiz', updateAccessToken, isAuthenticated, addQuizToSection);
+router.patch(
+    '/:id/add-quiz',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    addQuizToSection
+);
 
-router.patch('/:id/reorder', updateAccessToken, isAuthenticated, reorderSection);
+router.patch(
+    '/:id/reorder',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    reorderSection
+);
 
-router.patch('/:id/remove-item', updateAccessToken, isAuthenticated, removeItemFromSection);
+router.patch(
+    '/:id/remove-item',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    removeItemFromSection
+);
 
 export default router;

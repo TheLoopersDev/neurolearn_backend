@@ -61,140 +61,180 @@ const findRequestWithFallback = async (requestId: string) => {
 
 // Create course approval request
 export const createCourseApprovalRequest = catchAsync(async (req, res, next) => {
-    const userId = req.user?._id;
-    if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
+  const userId = req.user?._id;
+  if (!userId) return next(new ErrorHandler('Unauthorized access', 401));
 
-    let { courseId, message, courseSnapshot, sectionsSnapshot, thumbnailUrl } = (req.body || {}) as any;
+  let { courseId, message, courseSnapshot, sectionsSnapshot, thumbnailUrl } = (req.body || {}) as any;
 
-    // Parse nếu phía FE lỡ gửi string
-    if (typeof courseSnapshot === 'string') {
-        try {
-            courseSnapshot = JSON.parse(courseSnapshot);
-        } catch {}
-    }
-    if (typeof sectionsSnapshot === 'string') {
-        try {
-            sectionsSnapshot = JSON.parse(sectionsSnapshot);
-        } catch {}
-    }
+  // Parse nếu FE lỡ gửi string
+  if (typeof courseSnapshot === 'string') {
+      try {
+          courseSnapshot = JSON.parse(courseSnapshot);
+      } catch {}
+  }
+  if (typeof sectionsSnapshot === 'string') {
+      try {
+          sectionsSnapshot = JSON.parse(sectionsSnapshot);
+      } catch {}
+  }
 
-    // fallback khi FE đính trong snapshot
-    if (!courseId) courseId = courseSnapshot?._id || courseSnapshot?.courseId;
-    if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
+  // fallback khi FE đính trong snapshot
+  if (!courseId) courseId = courseSnapshot?._id || courseSnapshot?.courseId;
+  if (!courseId) return next(new ErrorHandler('Course ID is required', 400));
 
-    // 1) Tải course từ DB
-    const courseDoc = await CourseModel.findById(courseId);
-    if (!courseDoc) return next(new ErrorHandler('Course not found', 404));
+  // 1) Tải course từ DB
+  const courseDoc = await CourseModel.findById(courseId);
+  if (!courseDoc) return next(new ErrorHandler('Course not found', 404));
 
-    // 2) (Tuỳ chọn) đồng bộ 1 số field cơ bản từ snapshot vào Course để UI đọc qua courseId là đúng ngay
-    if (courseSnapshot && typeof courseSnapshot === 'object') {
-        const fields = [
-            'name',
-            'subTitle',
-            'description',
-            'overview',
-            'level',
-            'category',
-            'subCategory',
-            'price',
-            'estimatedPrice',
-            'duration',
-            'topics',
-            'benefits',
-            'prerequisites',
-            'isDraft',
-            'isPublished',
-            'isFree',
-            'demoUrl'
-        ];
-        for (const k of fields) if (courseSnapshot[k] !== undefined) (courseDoc as any)[k] = courseSnapshot[k];
+  // 2) Đồng bộ một số field cơ bản từ snapshot vào Course (để FE đọc courseId là thấy đúng ngay)
+  if (courseSnapshot && typeof courseSnapshot === 'object') {
+      const fields = [
+          'name',
+          'subTitle',
+          'description',
+          'overview',
+          'level',
+          'category',
+          'subCategory',
+          'price',
+          'estimatedPrice',
+          'duration',
+          'topics',
+          'benefits',
+          'prerequisites',
+          'isDraft',
+          'isPublished',
+          'isFree',
+          'demoUrl'
+      ];
+      for (const k of fields) if (courseSnapshot[k] !== undefined) (courseDoc as any)[k] = courseSnapshot[k];
 
-        const snapThumb =
-            thumbnailUrl ||
-            courseSnapshot.thumbnailUrl ||
-            (typeof courseSnapshot.thumbnail === 'string' ? courseSnapshot.thumbnail : courseSnapshot.thumbnail?.url);
+      const snapThumb =
+          thumbnailUrl ||
+          courseSnapshot.thumbnailUrl ||
+          (typeof courseSnapshot.thumbnail === 'string' ? courseSnapshot.thumbnail : courseSnapshot.thumbnail?.url);
 
-        if (snapThumb) {
-            (courseDoc as any).thumbnail =
-                typeof (courseDoc as any).thumbnail === 'object'
-                    ? { ...((courseDoc as any).thumbnail || {}), url: snapThumb }
-                    : { url: snapThumb };
-        }
-        await courseDoc.save();
-    }
+      if (snapThumb) {
+          (courseDoc as any).thumbnail =
+              typeof (courseDoc as any).thumbnail === 'object'
+                  ? { ...((courseDoc as any).thumbnail || {}), url: snapThumb }
+                  : { url: snapThumb };
+      }
+      await courseDoc.save();
+  }
 
-    // 3) Xây sectionsSnapshot từ DB (ĐÚNG QUAN HỆ)
-    //    - Ưu tiên dùng courseDoc.sections nếu có
-    let sectionDocs: any[] = [];
-    if (Array.isArray((courseDoc as any).sections) && (courseDoc as any).sections.length) {
-        sectionDocs = await SectionModel.find({ _id: { $in: (courseDoc as any).sections } })
-            .select('_id title order isPublished')
+  // 3) Build sectionsSnapshot từ DB (chuẩn hoá thứ tự và shape)
+  let sectionDocs: any[] = [];
+  if (Array.isArray((courseDoc as any).sections) && (courseDoc as any).sections.length) {
+      sectionDocs = await SectionModel.find({ _id: { $in: (courseDoc as any).sections } })
+          .select('_id title order isPublished')
+          .sort({ order: 1 })
+          .lean();
+  } else {
+      sectionDocs = await SectionModel.find({ $or: [{ course: courseId }, { courseId }] })
+          .select('_id title order isPublished')
+          .sort({ order: 1 })
+          .lean();
+  }
+
+  const sectionIds = sectionDocs.map((s) => s._id);
+  const lessonDocs = sectionIds.length
+      ? await LessonModel.find({ sectionId: { $in: sectionIds } })
+            .select('_id title order isPublished videoLength videoUrl sectionId')
             .sort({ order: 1 })
-            .lean();
-    } else {
-        // fallback theo khóa ngoại trong Section: course hoặc courseId
-        sectionDocs = await SectionModel.find({ $or: [{ course: courseId }, { courseId }] })
-            .select('_id title order isPublished')
-            .sort({ order: 1 })
-            .lean();
-    }
+            .lean()
+      : [];
 
-    const sectionIds = sectionDocs.map((s) => s._id);
+  const lessonsBySection = new Map<string, any[]>();
+  for (const l of lessonDocs) {
+      const sid = String(l.sectionId);
+      if (!lessonsBySection.has(sid)) lessonsBySection.set(sid, []);
+      lessonsBySection.get(sid)!.push({
+          _id: l._id,
+          title: l.title,
+          order: l.order,
+          isPublished: !!l.isPublished,
+          videoLength: l.videoLength,
+          videoUrl: l.videoUrl
+      });
+  }
 
-    // Lấy tất cả lesson theo sectionId (KHÔNG query theo course nữa)
-    const lessonDocs = sectionIds.length
-        ? await LessonModel.find({ sectionId: { $in: sectionIds } })
-              .select('_id title order isPublished videoLength videoUrl sectionId')
-              .sort({ order: 1 })
-              .lean()
-        : [];
+  const sectionsSnapshotFromDb = sectionDocs.map((s) => ({
+      _id: s._id,
+      title: s.title,
+      order: s.order,
+      isPublished: !!s.isPublished,
+      lessons: (lessonsBySection.get(String(s._id)) || []).sort((a, b) => a.order - b.order)
+  }));
 
-    // gom lesson theo section
-    const lessonsBySection = new Map<string, any[]>();
-    for (const l of lessonDocs) {
-        const sid = String(l.sectionId);
-        if (!lessonsBySection.has(sid)) lessonsBySection.set(sid, []);
-        lessonsBySection.get(sid)!.push({
-            _id: l._id,
-            title: l.title,
-            order: l.order,
-            isPublished: !!l.isPublished,
-            videoLength: l.videoLength,
-            videoUrl: l.videoUrl // không gate isFree nữa
-        });
-    }
+  // Luôn ưu tiên snapshot từ DB để chuẩn hoá
+  sectionsSnapshot = sectionsSnapshotFromDb;
 
-    // build snapshot cuối cùng (luôn từ DB để đủ thông tin)
-    const sectionsSnapshotFromDb = sectionDocs.map((s) => ({
-        _id: s._id,
-        title: s.title,
-        order: s.order,
-        isPublished: !!s.isPublished,
-        lessons: lessonsBySection.get(String(s._id)) || []
-    }));
+  // Chuẩn hoá snapshot course để so sánh
+  const normalizeCourseSnap = (snap: any) => {
+      if (!snap || typeof snap !== 'object') return {};
+      const thumb =
+          snap.thumbnailUrl ||
+          (typeof snap.thumbnail === 'string' ? snap.thumbnail : snap.thumbnail?.url) ||
+          (courseDoc as any)?.thumbnail?.url ||
+          undefined;
 
-    // Nếu FE gửi sectionsSnapshot thì vẫn có thể merge/ưu tiên DB tuỳ bạn:
-    sectionsSnapshot = sectionsSnapshotFromDb;
+      const pick = (o: any, keys: string[]) => {
+          const out: any = {};
+          for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+          return out;
+      };
+      const base = pick(snap, [
+          'name',
+          'subTitle',
+          'description',
+          'overview',
+          'level',
+          'category',
+          'subCategory',
+          'price',
+          'estimatedPrice',
+          'duration',
+          'topics',
+          'benefits',
+          'prerequisites',
+          'isDraft',
+          'isPublished',
+          'isFree',
+          'demoUrl'
+      ]);
+      if (thumb) base.thumbnailUrl = thumb;
+      return base;
+  };
 
-    // 4) Chặn request pending trùng
-    const existed = await RequestModel.findOne({
-        userId,
-        courseId,
-        type: 'course_approval',
-        status: 'pending'
-    });
-    if (existed) return next(new ErrorHandler('A course approval request is already pending.', 400));
+  const normalizeSectionsSnap = (secs: any[]) => {
+      return (Array.isArray(secs) ? secs : [])
+          .map((s) => ({
+              _id: String(s._id),
+              title: s.title ?? '',
+              order: Number(s.order ?? 0),
+              isPublished: !!s.isPublished,
+              lessons: (Array.isArray(s.lessons) ? s.lessons : [])
+                  .map((l: any) => ({
+                      _id: String(l._id),
+                      title: l.title ?? '',
+                      order: Number(l.order ?? 0),
+                      isPublished: !!l.isPublished,
+                      // chỉ giữ phần cần thiết để so sánh, tránh noise
+                      videoLength: l.videoLength ?? undefined,
+                      videoUrl: l?.videoUrl?.url ?? l?.videoUrl ?? undefined
+                  }))
+                  .sort((a: any, b: any) => a.order - b.order)
+          }))
+          .sort((a, b) => a.order - b.order);
+  };
 
-    // 5) Tạo request mới + nhúng snapshot
-    const newReq = await RequestModel.create({
-        userId,
-        courseId,
-        type: 'course_approval',
-        status: 'pending',
-        message: message || `Request to approve course`,
-        data: {
-            course: courseSnapshot || {
-                // fallback tối thiểu từ courseDoc để audit
+  const deepEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+
+  const newCourseSnap =
+      courseSnapshot && typeof courseSnapshot === 'object'
+          ? courseSnapshot
+          : {
                 _id: courseDoc._id,
                 name: courseDoc.name,
                 subTitle: courseDoc.subTitle,
@@ -205,37 +245,117 @@ export const createCourseApprovalRequest = catchAsync(async (req, res, next) => 
                 duration: courseDoc.duration,
                 topics: (courseDoc as any).topics || (courseDoc as any).tags || [],
                 isPublished: (courseDoc as any).isPublished,
-                isDraft: (courseDoc as any).isDraft
-            },
-            sections: sectionsSnapshot
-        }
-    });
+                isDraft: (courseDoc as any).isDraft,
+                thumbnail: (courseDoc as any)?.thumbnail,
+                level: (courseDoc as any)?.level,
+                category: (courseDoc as any)?.category,
+                subCategory: (courseDoc as any)?.subCategory,
+                isFree: (courseDoc as any)?.isFree,
+                demoUrl: (courseDoc as any)?.demoUrl,
+                benefits: (courseDoc as any)?.benefits,
+                prerequisites: (courseDoc as any)?.prerequisites
+            };
 
-    // 6) Populate để UI (CoursePreviewModal) đọc trực tiếp selectedRequest.courseId.sections.lessons
-    const populated = await RequestModel.findById(newReq._id)
-        .populate({
-            path: 'courseId',
-            select: 'name subTitle description overview topics tags thumbnail price estimatedPrice duration isPublished updatedAt sections',
-            populate: {
-                path: 'sections',
-                select: '_id title order isPublished lessons',
-                options: { sort: { order: 1 } },
-                populate: {
-                    path: 'lessons',
-                    select: '_id title order isPublished videoLength videoUrl',
-                    options: { sort: { order: 1 } }
-                }
-            }
-        })
-        .populate({ path: 'userId', select: 'name email avatar' })
-        .lean();
+  const normNewCourse = normalizeCourseSnap(newCourseSnap);
+  const normNewSections = normalizeSectionsSnap(sectionsSnapshot);
 
-    return res.status(201).json({
-        success: true,
-        message: 'Course approval request has been submitted.',
-        data: populated
-    });
+  // 4) Xử lý khi đã có request pending: cập nhật nếu có thay đổi, ngược lại báo đã tồn tại
+  const existed = await RequestModel.findOne({
+      userId,
+      courseId,
+      type: 'course_approval',
+      status: 'pending'
+  });
+
+  if (existed) {
+      const currCourse = normalizeCourseSnap(existed?.data?.course || {});
+      const currSections = normalizeSectionsSnap(existed?.data?.sections || []);
+
+      const changedCourse = !deepEqual(currCourse, normNewCourse);
+      const changedSections = !deepEqual(currSections, normNewSections);
+
+      if (changedCourse || changedSections) {
+          existed.data = existed.data || {};
+          existed.data.course = newCourseSnap;
+          existed.data.sections = sectionsSnapshot;
+          if (message) existed.message = message;
+          existed.markModified('data');
+          await existed.save();
+
+          const populated = await RequestModel.findById(existed._id)
+              .populate({
+                  path: 'courseId',
+                  select: 'name subTitle description overview topics tags thumbnail price estimatedPrice duration isPublished updatedAt sections',
+                  populate: {
+                      path: 'sections',
+                      select: '_id title order isPublished lessons',
+                      options: { sort: { order: 1 } },
+                      populate: {
+                          path: 'lessons',
+                          select: '_id title order isPublished videoLength videoUrl',
+                          options: { sort: { order: 1 } }
+                      }
+                  }
+              })
+              .populate({ path: 'userId', select: 'name email avatar' })
+              .lean();
+
+          return res.status(200).json({
+              success: true,
+              message: 'An approval request is already pending. It has been updated with your latest changes.',
+              updated: true,
+              data: populated
+          });
+      }
+
+      // Không có thay đổi
+      return res.status(200).json({
+          success: true,
+          message: 'An approval request is already pending. No changes detected.',
+          updated: false,
+          data: existed
+      });
+  }
+
+  // 5) Tạo request mới + nhúng snapshot
+  const newReq = await RequestModel.create({
+      userId,
+      courseId,
+      type: 'course_approval',
+      status: 'pending',
+      message: message || `Request to approve course`,
+      data: {
+          course: newCourseSnap,
+          sections: sectionsSnapshot
+      }
+  });
+
+  // 6) Populate để UI đọc trực tiếp
+  const populated = await RequestModel.findById(newReq._id)
+      .populate({
+          path: 'courseId',
+          select: 'name subTitle description overview topics tags thumbnail price estimatedPrice duration isPublished updatedAt sections',
+          populate: {
+              path: 'sections',
+              select: '_id title order isPublished lessons',
+              options: { sort: { order: 1 } },
+              populate: {
+                  path: 'lessons',
+                  select: '_id title order isPublished videoLength videoUrl',
+                  options: { sort: { order: 1 } }
+              }
+          }
+      })
+      .populate({ path: 'userId', select: 'name email avatar' })
+      .lean();
+
+  return res.status(201).json({
+      success: true,
+      message: 'Course approval request has been submitted.',
+      data: populated
+  });
 });
+
 
 
 // Get request by course ID (for course_approval)

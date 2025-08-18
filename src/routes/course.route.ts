@@ -44,6 +44,7 @@ import {
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
 import { get } from 'http';
+import { ensureCourseEditable } from '@/middlewares/ensureCourseEditable';
 
 /**
  * @swagger
@@ -393,7 +394,13 @@ router.post('/create-course', isAuthenticated, updateAccessToken, uploadCourse);
  *       404:
  *         description: Course not found
  */
-router.put('/update-course/:id', isAuthenticated, updateAccessToken, updateCourse);
+router.put(
+    '/update-course/:id',
+    isAuthenticated,
+    updateAccessToken,
+    ensureCourseEditable({ allowAdminOverride: true }),
+    updateCourse
+);
 
 /**
  * @swagger
@@ -682,7 +689,13 @@ router.delete(
  *       401:
  *         description: Not authenticated
  */
-router.put('/create-section/:id', isAuthenticated, updateAccessToken, createSection);
+router.put(
+    '/create-section/:id',
+    isAuthenticated,
+    updateAccessToken,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    createSection
+);
 
 /**
  * @swagger
@@ -722,7 +735,13 @@ router.put('/create-section/:id', isAuthenticated, updateAccessToken, createSect
  *       401:
  *         description: Not authenticated
  */
-router.put('/update-section/:id', isAuthenticated, updateAccessToken, updateSection);
+router.put(
+    '/update-section/:id',
+    isAuthenticated,
+    updateAccessToken,
+    ensureCourseEditable({ allowAdminOverride: false }),
+    updateSection
+);
 
 /**
  * @swagger
