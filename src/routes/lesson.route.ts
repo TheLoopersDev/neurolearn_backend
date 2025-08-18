@@ -86,7 +86,6 @@ router.post(
     '/create/:courseId/:sectionId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     createLesson
 );
 
@@ -194,7 +193,6 @@ router.put(
     '/update/:lessonId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     updateLesson
 );
 
@@ -276,7 +274,6 @@ router.put(
     '/reorder/:sectionId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     reorderLesson
 );
 
@@ -377,6 +374,5 @@ router.put(
     updateAccessToken,
     isAuthenticated,
     upload.single('video'),
-    ensureCourseEditable({ allowAdminOverride: false }),
     uploadLessonVideo
 );

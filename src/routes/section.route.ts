@@ -64,7 +64,6 @@ router.post(
     '/create/:courseId',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     createSection
 );
 
@@ -114,7 +113,6 @@ router.put(
     '/update/:id',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     updateSection
 );
 
@@ -249,7 +247,6 @@ router.put(
     '/reorder',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     reorderSections
 );
 
@@ -369,7 +366,6 @@ router.patch(
     '/:id/add-quiz',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     addQuizToSection
 );
 
@@ -377,7 +373,6 @@ router.patch(
     '/:id/reorder',
     updateAccessToken,
     isAuthenticated,
-    ensureCourseEditable({ allowAdminOverride: false }),
     reorderSection
 );
 

@@ -398,7 +398,6 @@ router.put(
     '/update-course/:id',
     isAuthenticated,
     updateAccessToken,
-    ensureCourseEditable({ allowAdminOverride: true }),
     updateCourse
 );
 
@@ -655,6 +654,7 @@ router.delete(
     isAuthenticated,
     updateAccessToken,
     authorizeRoles('instructor', 'admin'),
+    ensureCourseEditable({ allowAdminOverride: false }),
     deleteCourse
 );
 
@@ -693,7 +693,6 @@ router.put(
     '/create-section/:id',
     isAuthenticated,
     updateAccessToken,
-    ensureCourseEditable({ allowAdminOverride: false }),
     createSection
 );
 
@@ -739,7 +738,6 @@ router.put(
     '/update-section/:id',
     isAuthenticated,
     updateAccessToken,
-    ensureCourseEditable({ allowAdminOverride: false }),
     updateSection
 );
 
