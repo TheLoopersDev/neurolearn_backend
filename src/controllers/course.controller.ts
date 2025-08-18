@@ -204,7 +204,7 @@ import { ICourseDetail } from '../interfaces/Course'; // interface mới
 import OrderModel from '../models/Order.model';
 import ProgressModel from '../models/Progress.model';
 import QuizModel from '../models/Quiz.model';
-import RequestModel from '@/models/Request.model';
+import RequestModel from '../models/Request.model';
 
 export const getSingleCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
