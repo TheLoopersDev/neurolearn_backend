@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import cloudinary from 'cloudinary';
 import { catchAsync } from '../utils/catchAsync';
 import ErrorHandler from '../utils/ErrorHandler';
 import UserModel from '../models/User.model';
@@ -275,6 +276,59 @@ export const getBusinessById = catchAsync(async (req: Request, res: Response, ne
         success: true,
         business
     });
+});
+
+// Update business basic info (admin only)
+export const updateBusinessInfo = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as {
+        businessInfo?: {
+            businessId?: string;
+            role?: string;
+        };
+    };
+
+    const role = user?.businessInfo?.role;
+    if (role !== 'admin') {
+        return next(new ErrorHandler('Forbidden', 403));
+    }
+
+    const businessId = user?.businessInfo?.businessId;
+    if (!businessId) {
+        return next(new ErrorHandler('Business ID not found for current user', 400));
+    }
+
+    const { businessName, logo, email } = req.body as { businessName?: string; logo?: string; email?: string };
+
+    const business = await BusinessModel.findById(businessId);
+    if (!business) {
+        return next(new ErrorHandler('Business not found', 404));
+    }
+
+    if (typeof businessName === 'string' && businessName.trim().length > 0) {
+        business.businessName = businessName.trim();
+    }
+
+    if (logo) {
+        const uploaded = await cloudinary.v2.uploader.upload(logo, {
+            folder: 'business-logos',
+            width: 300,
+            crop: 'limit'
+        });
+        business.logo = uploaded.secure_url;
+    }
+
+    if (email && email.trim()) {
+        const emailTrimmed = email.trim();
+        const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+        if (!emailRegex.test(emailTrimmed)) {
+            return next(new ErrorHandler('Invalid email format', 400));
+        }
+        business.email = emailTrimmed;
+    }
+
+    await business.save();
+
+    res.status(200).json({ success: true, business });
 });
 
 export const checkEmployeeProgressDaily = () => {
