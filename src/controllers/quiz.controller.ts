@@ -5,7 +5,7 @@ import Quiz from '../models/Quiz.model'; // Adjust the import path as needed
 import ErrorHandler from '../utils/ErrorHandler';
 import mongoose from 'mongoose';
 import { IQuestion } from '../interfaces/Quiz';
-
+import cloudinary from 'cloudinary';
 const TAG_QUIZZES = 'tag:quizzes';
 
 export async function getCache(key: string) {
@@ -156,27 +156,145 @@ export const getAllQuizzes = catchAsync(async (req, res) => {
     res.status(200).json({ success: true, quizzes });
 });
 
-// PUT /api/quizzes/:quizId - Update a quiz
-export const updateQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const quizId = req.params.id;
+// PUT /api/quizzes/:quizId - Update a quiz + upload Cloudinary
+import { Readable } from 'stream';
 
-    // Validate ID
+function bufferToStream(buffer: Buffer) {
+    const readable = new Readable();
+    readable.push(buffer);
+    readable.push(null);
+    return readable;
+}
+
+// Rút public_id từ secure URL cũ (không cần đổi schema)
+function extractPublicIdFromUrl(url?: string | null): string | null {
+    if (!url) return null;
+    try {
+        const u = new URL(url);
+        const parts = u.pathname.split('/');
+        const uploadIdx = parts.findIndex((p) => p === 'upload');
+        if (uploadIdx === -1) return null;
+        const afterUpload = parts.slice(uploadIdx + 1);
+        const first = afterUpload[0] || '';
+        const rest = /^\s*v\d+\s*$/.test(first) ? afterUpload.slice(1) : afterUpload;
+        if (rest.length === 0) return null;
+        const last = rest[rest.length - 1];
+        const filenameNoExt = last.replace(/\.[^.]+$/, '');
+        const folder = rest.length > 1 ? rest.slice(0, -1).join('/') : '';
+        return folder ? `${folder}/${filenameNoExt}` : filenameNoExt;
+    } catch {
+        return null;
+    }
+}
+
+export const updateQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const quizId = (req.params.quizId || req.params.id) as string;
     if (!mongoose.Types.ObjectId.isValid(quizId)) {
         return next(new ErrorHandler('Invalid quiz ID format', 400));
     }
 
-    // Find existing quiz
     const quiz = await Quiz.findById(quizId);
-    if (!quiz) {
-        return next(new ErrorHandler('Quiz not found', 404));
+    if (!quiz) return next(new ErrorHandler('Quiz not found', 404));
+
+    // -------- LOG CHẨN ĐOÁN --------
+    console.log('[updateQuiz] quizId =', quizId);
+    console.log(
+        '[updateQuiz] has file?',
+        !!(req as any).file,
+        'removeImage=',
+        req.body?.removeImage,
+        'has imageBase64?',
+        !!req.body?.imageBase64
+    );
+
+    // ====== xử lý cover image ======
+    const removeImage = String(req.body.removeImage || '').toLowerCase() === 'true';
+
+    // A) XÓA ẢNH
+    if (removeImage && quiz.imageUrl) {
+        const oldId = extractPublicIdFromUrl(quiz.imageUrl);
+        if (oldId) {
+            try {
+                const delRes = await cloudinary.v2.uploader.destroy(oldId);
+                console.log('[updateQuiz] destroyed old image:', delRes);
+            } catch (e) {
+                console.warn('[updateQuiz] destroy old image failed:', (e as Error).message);
+            }
+        }
+        quiz.imageUrl = undefined;
     }
 
-    // Update fields
-    const allowedFields = [
+    // B) UPLOAD FILE (multer)
+    if ((req as any).file) {
+        const file = (req as any).file as Express.Multer.File;
+        // Validate thêm ở backend
+        if (!file.mimetype.startsWith('image/')) {
+            return next(new ErrorHandler('Invalid file type. Only images are allowed.', 400));
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            return next(new ErrorHandler('Image size must be ≤ 5MB.', 400));
+        }
+
+        try {
+            const uploadRes = await cloudinary.v2.uploader.upload(
+                `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+                {
+                    folder: 'quizzes',
+                    resource_type: 'image'
+                }
+            );
+            console.log('[updateQuiz] upload file ok:', uploadRes.public_id, uploadRes.secure_url);
+
+            // dọn ảnh cũ nếu khác
+            if (quiz.imageUrl) {
+                const oldId = extractPublicIdFromUrl(quiz.imageUrl);
+                if (oldId && oldId !== uploadRes.public_id) {
+                    try {
+                        const delRes = await cloudinary.v2.uploader.destroy(oldId);
+                        console.log('[updateQuiz] destroyed previous image:', delRes);
+                    } catch (e) {
+                        console.warn('[updateQuiz] destroy previous failed:', (e as Error).message);
+                    }
+                }
+            }
+
+            quiz.imageUrl = uploadRes.secure_url;
+        } catch (e: any) {
+            console.error('[updateQuiz] upload file error:', e?.message);
+            return next(new ErrorHandler('Upload to Cloudinary failed', 500));
+        }
+    }
+
+    // C) UPLOAD BASE64 (data URL)
+    const imageBase64 = req.body.imageBase64 as string | undefined;
+    if (imageBase64 && imageBase64.startsWith('data:image/')) {
+        try {
+            const up = await cloudinary.v2.uploader.upload(imageBase64, { folder: 'quizzes', resource_type: 'image' });
+            console.log('[updateQuiz] upload base64 ok:', up.public_id, up.secure_url);
+
+            if (quiz.imageUrl) {
+                const oldId = extractPublicIdFromUrl(quiz.imageUrl);
+                if (oldId && oldId !== up.public_id) {
+                    try {
+                        const delRes = await cloudinary.v2.uploader.destroy(oldId);
+                        console.log('[updateQuiz] destroyed previous image:', delRes);
+                    } catch (e) {
+                        console.warn('[updateQuiz] destroy previous failed:', (e as Error).message);
+                    }
+                }
+            }
+            quiz.imageUrl = up.secure_url;
+        } catch (e: any) {
+            console.error('[updateQuiz] upload base64 error:', e?.message);
+            return next(new ErrorHandler('Upload base64 to Cloudinary failed', 500));
+        }
+    }
+
+    // ====== cập nhật các field khác (KHÔNG cho body đè imageUrl) ======
+    const allowedFields: (keyof typeof quiz)[] = [
         'name',
         'examTitle',
         'duration',
-        'imageUrl',
         'category',
         'progress',
         'questions',
@@ -186,25 +304,34 @@ export const updateQuiz = catchAsync(async (req: Request, res: Response, next: N
         'difficulty',
         'passingScore',
         'maxAttempts',
-        'isPublished',
-        'sectionOrder',
-        'lessonOrder'
-    ];
+        'isPublished'
+        // 'imageUrl',  // <-- CẤM: không cho body đè URL ảnh
+    ] as any;
 
-    allowedFields.forEach((field) => {
-        if (req.body[field] !== undefined) {
-            (quiz as any)[field] = req.body[field];
+    // parse questions nếu là string
+    let incomingQuestions = (req.body as any).questions;
+    if (typeof incomingQuestions === 'string') {
+        try {
+            incomingQuestions = JSON.parse(incomingQuestions);
+        } catch {
+            /* ignore */
+        }
+    }
+    if (Array.isArray(incomingQuestions)) {
+        (quiz as any).questions = incomingQuestions;
+        (quiz as any).totalQuestions = incomingQuestions.length;
+    }
+
+    allowedFields.forEach((field: any) => {
+        if (field === 'questions') return; // đã xử lý trên
+        if ((req.body as any)[field] !== undefined) {
+            (quiz as any)[field] = (req.body as any)[field];
         }
     });
 
-    // Auto-update totalQuestions if question list was replaced
-    if (Array.isArray(req.body.questions)) {
-        quiz.totalQuestions = req.body.questions.length;
-    }
-
     await quiz.save();
+    console.log('[updateQuiz] saved quiz.imageUrl =', quiz.imageUrl);
 
-    // Clear cache if exists
     await redis.del(`quiz:${quizId}`);
     await invalidateQuizzesCache();
 
@@ -214,6 +341,7 @@ export const updateQuiz = catchAsync(async (req: Request, res: Response, next: N
         quiz
     });
 });
+
 
 // DELETE /api/quizzes/:quizId - Delete a quiz
 export const deleteQuiz = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
