@@ -17,7 +17,7 @@ import {
     removeItemFromSection
 } from '../controllers/section.controller';
 import { ensureCourseEditable } from '../middlewares/ensureCourseEditable';
-import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 
 const router = express.Router();
 
