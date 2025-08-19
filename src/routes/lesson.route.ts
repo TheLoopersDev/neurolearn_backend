@@ -15,7 +15,7 @@ import {
 import { updateAccessToken } from '../controllers/user.controller';
 import { upload } from '../middlewares/upload';
 import { ensureLessonDeletable } from '../middlewares/ensureCourseEditable';
-import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 
 const router = express.Router();
 
