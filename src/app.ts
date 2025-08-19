@@ -17,11 +17,13 @@ import './middlewares/errors/unhandledRejection';
 // Import Routes
 import api from './api';
 import { payosWebhook } from './controllers/payment.controller';
-import { checkEmployeeProgressDaily } from './controllers/business.controller';
+import { checkEmployeeProgressDaily, removeExpiredAssignedCoursesDaily } from './controllers/business.controller';
 
 const app = express();
 
 checkEmployeeProgressDaily();
+
+removeExpiredAssignedCoursesDaily();
 
 dotenv.config();
 
