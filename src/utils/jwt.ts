@@ -10,6 +10,7 @@ interface ITokenOptions {
     secure?: boolean;
     path?: string;
 }
+const isProd = process.env.NODE_ENV === 'production';
 
 // Parse environment variables with fallback values
 const accessTokenExpire = parseInt(process.env.ACCESS_TOKEN_EXPIRE || '3000', 10);
@@ -20,10 +21,9 @@ export const accessTokenOptions: ITokenOptions = {
     expires: new Date(Date.now() + accessTokenExpire * 60 * 60 * 1000),
     maxAge: accessTokenExpire * 60 * 60 * 1000,
     httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-    path: '/'
-    // sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: isProd,
+    path: '/',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
     // secure: process.env.NODE_ENV === 'production',
 };
 
@@ -31,9 +31,9 @@ export const refreshTokenOptions: ITokenOptions = {
     expires: new Date(Date.now() + refreshTokenExpire * 24 * 60 * 60 * 1000),
     maxAge: refreshTokenExpire * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-    path: '/'
+    secure: isProd,
+    path: '/',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
 };
 
 export const sendToken = (user: UserT, statusCode: number, res: Response) => {
