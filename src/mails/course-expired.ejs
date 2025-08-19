@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>New Course Assigned</title>
+    <title>Course Expired Notification</title>
     <style type="text/css">
       body {
         margin: 0;
@@ -31,12 +31,16 @@
         margin-top: 0;
         margin-bottom: 24px;
       }
+      ul {
+        padding-left: 20px;
+        margin-bottom: 24px;
+      }
       .email-wrapper {
         max-width: 600px;
         margin: 0 auto;
       }
       .email-header {
-        background-color: #3858f8;
+        background-color: #f44336;
         padding: 24px;
         color: #fff;
       }
@@ -64,27 +68,21 @@
   <body>
     <div class="email-wrapper">
       <div class="email-header">
-        <h1>New Course Assigned to You</h1>
+        <h1>Course Expired Notification</h1>
       </div>
       <div class="email-body">
         <p>Hello <%= user.name %>,</p>
         <p>
-          You have been assigned a new course titled
-          <strong><%= course.title %></strong> by your business
-          <strong><%= businessName %></strong>.
+          The following course(s) assigned to you have expired and are no longer available:
         </p>
+        <ul>
+          <% courses.forEach(function(course) { %>
+            <li><%= course %></li>
+          <% }) %>
+        </ul>
         <p>
-          <strong>Start Date:</strong> <%= startDate %><br />
-          <strong>Due Date:</strong> <%= dueDate %>
+          Please contact your manager or support team if you believe this is a mistake or need further assistance.
         </p>
-        <p>
-          Please log in to your Academix account to begin learning and track your progress.
-        </p>
-        <p>
-          If you have any questions, please contact your manager or business administrator.
-        </p>
-
-        <!-- Go to Website button -->
         <p style="text-align: center; margin-top: 32px;">
           <a class="button" href="<%= clientUrl %>" target="_blank" style="color: #fff !important;">
             Go to Website
@@ -93,7 +91,7 @@
       </div>
       <div class="email-footer">
         <p>
-          For assistance, contact us at
+          Need help? Contact us at
           <a href="mailto:support@academix.com">support@academix.com</a>
         </p>
       </div>

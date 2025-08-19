@@ -26,9 +26,13 @@ export const getCertificateById = async (req: Request, res: Response) => {
 
 export const getAllCertificates = async (req: Request, res: Response) => {
   try {
-    const certificates = await Certificate.find()
+    const isAdmin = (req.user as any)?.role === 'admin';
+    const filter = isAdmin ? {} : { user: req.user?._id };
+
+    const certificates = await Certificate.find(filter)
       .populate('user', 'name email')
       .populate('course', 'title');
+
     res.status(200).json(certificates);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

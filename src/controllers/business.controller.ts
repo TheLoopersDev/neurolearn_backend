@@ -12,6 +12,10 @@ import ProgressModel from '../models/Progress.model';
 import cron from 'node-cron';
 import jwt from 'jsonwebtoken';
 import InviteModel from '../models/Invite.model';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
 export const addEmployeeByEmail = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { businessId } = req.params;
     const { email, role } = req.body;
@@ -239,14 +243,15 @@ export const assignCourseToEmployee = catchAsync(async (req: Request, res: Respo
     // ✅ Gửi mail
     await sendMail({
         email: employee.email,
-        subject: `You’ve been assigned a new course: ${course.title}`,
+        subject: `You’ve been assigned a new course: ${course.name}`,
         template: 'course-assigned.ejs',
         data: {
             user: { name: employee.name },
             course: { title: course.title },
             startDate: new Date(startDate).toLocaleDateString(),
             dueDate: new Date(dueDate).toLocaleDateString(),
-            businessName: business.businessName
+            businessName: business.businessName,
+            clientUrl: process.env.ORIGIN
         }
     });
 
@@ -808,3 +813,46 @@ export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res
         }
     });
 });
+
+export const removeExpiredAssignedCoursesDaily = () => {
+    // Chạy vào 00:00 hằng ngày
+    cron.schedule('0 0 * * *', async () => {
+        const users = await UserModel.find({
+            assignedCourses: { $exists: true, $ne: [] }
+        });
+
+        const now = new Date();
+
+        for (const user of users) {
+            const expiredCourses: string[] = [];
+
+            const validCourses = [];
+            for (const assigned of user.assignedCourses) {
+                if (assigned.dueDate && new Date(assigned.dueDate) < now) {
+                    // hết hạn → push vào expiredCourses
+                    const courseDoc = await CourseModel.findById(assigned.course);
+                    expiredCourses.push(courseDoc?.name || 'Khóa học không xác định');
+                } else {
+                    validCourses.push(assigned);
+                }
+            }
+
+            // Nếu có course hết hạn thì update và gửi mail
+            if (expiredCourses.length > 0) {
+                user.assignedCourses = validCourses;
+                await user.save();
+
+                await sendMail({
+                    email: user.email,
+                    subject: 'Your assigned courses have expired',
+                    template: 'course-expired.ejs',
+                    data: {
+                        user: { name: user.name },
+                        courses: expiredCourses,
+                        clientUrl: process.env.ORIGIN
+                    }
+                });
+            }
+        }
+    });
+};
