@@ -3,7 +3,7 @@ import { ICourse, IReview, IReviewReply } from '../interfaces/Course';
 
 const ReviewReplySchema = new Schema<IReviewReply>(
     {
-        user: Object,
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         comment: String
     },
     { timestamps: true }
@@ -11,7 +11,7 @@ const ReviewReplySchema = new Schema<IReviewReply>(
 
 const ReviewSchema = new Schema<IReview>(
     {
-        user: Object,
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         rating: { type: Number, default: 0 },
         comment: String,
         commentReplies: [ReviewReplySchema]

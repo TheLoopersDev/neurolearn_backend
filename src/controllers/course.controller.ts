@@ -394,7 +394,7 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
                   _id: r._id,
                   rating: r.rating,
                   comment: r.comment,
-                  user: { name: r.user?.name || '', avatar: r.user?.avatar || '' },
+                  user: { name: r.user?.name || '', avatar: r.user?.avatar || '', createdAt: r.user?.createdAt || '' },
                   commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
               }))
             : []
@@ -800,17 +800,17 @@ export const getAllCoursesWithoutPurchase = catchAsync(async (req: Request, res:
 
 // get course content -- only for valid user
 
-export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const purchasedCourses = req?.user?.purchasedCourses;
-
+export const getAllPurchasedCoursesOfUser = catchAsync(async (req, res, next) => {
+    const purchasedCourses = req?.user?.purchasedCourses || [];
     if (!purchasedCourses || purchasedCourses.length === 0) {
         return next(new ErrorHandler('No purchased courses found', 404));
     }
 
-    // Lấy thông tin khóa học từ cơ sở dữ liệu
-    const courses = await CourseModel.find({
-        _id: { $in: purchasedCourses }
-    })
+    // Ép kiểu ObjectId an toàn
+    const courseIds = purchasedCourses.map((id: any) => new Types.ObjectId(String(id)));
+
+    // Lấy thông tin khóa học cơ bản
+    const courses = await CourseModel.find({ _id: { $in: courseIds } })
         .populate('authorId', 'name email')
         .populate('category', 'name')
         .populate('subCategory', 'name')
@@ -820,49 +820,51 @@ export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res:
         return next(new ErrorHandler('Courses not found', 404));
     }
 
-    // Lấy thông tin tiến độ cho từng khóa học
-    const coursesWithProgress = await Promise.all(
-        courses.map(async (course) => {
-            // Tìm tiến độ của khóa học theo user và courseId
-            const progress = await ProgressModel.findOne({
-                course: course._id,
-                user: req.user._id // Lấy tiến độ cho người dùng hiện tại
-            }).lean(); // sử dụng lean() để lấy kết quả là đối tượng JavaScript thay vì Mongoose document
+    const userId = new Types.ObjectId(String(req.user._id));
 
-            // Kiểm tra nếu progress không tồn tại hoặc bị lỗi
-            if (!progress || Array.isArray(progress)) {
-                return {
-                    ...course,
-                    progress: 0 // Nếu không có tiến độ, mặc định là 0%
-                };
-            }
+    const results = [];
+    for (const course of courses) {
+        // 1) Sections
+        // 1) Sections (tổng & đã publish)
+        const sectionDocs = await SectionModel.find({ courseId: course._id }).select('_id').lean();
+        const sectionIds = sectionDocs.map((s: any) => s._id);
+        const sectionsCount = sectionIds.length;
 
-            // Kiểm tra nếu progress có các trường totalCompleted và totalLessons
-            const totalLessons = progress?.totalLessons || 0; // Kiểm tra progress là đối tượng
-            const totalCompleted = progress?.totalCompleted || 0;
+        // Published sections
+        const publishedSectionDocs = await SectionModel.find({ courseId: course._id, isPublished: true }) // nếu bạn dùng isPublish -> đổi lại
+            .select('_id')
+            .lean();
+        const publishedSectionIds = publishedSectionDocs.map((s: any) => s._id);
 
-            // Tính toán phần trăm tiến độ
-            const progressPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0; // Nếu không có lessons, trả về 0%
+        // Published lessons (trong các section đã publish)
+        let publishedLessonsCount = 0;
+        if (publishedSectionIds.length > 0) {
+            publishedLessonsCount = await LessonModel.countDocuments({
+                sectionId: { $in: publishedSectionIds },
+                isPublished: true // nếu bạn dùng isPublish -> đổi lại
+            });
+        }
 
-            // Số lượng phần của khóa học
-            const sectionsCount = course.sections?.length || 0;
+        // 3) Progress của user theo course
+        const prog = await ProgressModel.findOne({ course: course._id, user: req.user._id })
+            .select('totalLessons totalCompleted')
+            .lean<{ totalLessons?: number; totalCompleted?: number }>();
 
-            // Thời gian tổng khóa học (đơn vị: giờ)
-            const durationInHours = (course.duration / 60).toFixed(1);
+        const totalLessons = Number(prog?.totalLessons ?? 0);
+        const totalCompleted = Number(prog?.totalCompleted ?? 0);
+        const progress = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
 
-            return {
-                ...course,
-                sectionsCount,
-                duration: `${durationInHours} hours`,
-                progress: progressPercentage // Thêm thông tin tiến độ vào dữ liệu khóa học
-            };
-        })
-    );
+        results.push({
+            ...course,
+            sectionsCount,
+            duration: course.duration,
+            progress
+        });
+    }
 
-    // Trả về dữ liệu khóa học với chi tiết và tiến độ
-    res.status(200).json({
+    return res.status(200).json({
         success: true,
-        data: coursesWithProgress
+        data: results
     });
 });
 
@@ -1180,19 +1182,15 @@ export const addReview = catchAsync(async (req: Request, res: Response, next: Ne
     }
 
     // 3) Chuẩn bị dữ liệu review
-    const reviewData = {
-        user: req.user?._id, // ObjectId
-        rating,
-        comment: review?.trim() ?? ''
-    };
+    const reviewData = { user: req.user!._id, rating, comment: review?.trim() ?? '' };
 
-    // 4) Thêm review CHỈ khi user CHƯA review (atomic)
-    //    Nếu đã tồn tại review của user => findOneAndUpdate sẽ trả về null
-    const updatedCourse = await CourseModel.findOneAndUpdate(
-        { _id: courseId, 'reviews.user': { $ne: req.user?._id } },
+    let updatedCourse = await CourseModel.findOneAndUpdate(
+        { _id: courseId, 'reviews.user': { $ne: req.user!._id } },
         { $push: { reviews: reviewData } },
-        { new: true, projection: { reviews: 1, name: 1, authorId: 1, rating: 1 } }
-    );
+        { new: true }
+    )
+        .select('reviews name authorId rating')
+        .populate({ path: 'reviews.user', select: 'name avatar' });
 
     if (!updatedCourse) {
         // Có thể do: course không tồn tại HOẶC user đã review
@@ -1917,6 +1915,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
         { path: 'level', select: 'name' },
         { path: 'category', select: 'name' },
+        { path: 'reviews.user', select: 'name avatar' },
         { path: 'subCategory', select: 'name' }
     ]);
     if (!course) return next(new ErrorHandler('Course not found', 404));
@@ -2178,7 +2177,33 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     const durationText = `${hours}h ${minutes}m`;
 
     dbg('response.progress', progressSummary);
+    // --- shape reviews to include user.name & user.avatar (works with embedded snapshots) ---
+    const shapedReviews = (Array.isArray(course.reviews) ? course.reviews : []).map((r: any) => {
+        const u: any = r?.user || {};
+        const isObj = u && typeof u === 'object' && !('toHexString' in u); // not a plain ObjectId
 
+        const name = isObj ? (u.name ?? 'Anonymous') : 'Anonymous';
+        const avatarUrl = isObj ? (u.avatar?.url ?? '') : '';
+
+        return {
+            _id: String(r?._id ?? ''),
+            rating: Number(r?.rating ?? 0),
+            comment: r?.comment ?? '',
+            createdAt: r?.createdAt ?? undefined,
+            user: { name, avatar: { url: avatarUrl } },
+            commentReplies: (Array.isArray(r?.commentReplies) ? r.commentReplies : []).map((rp: any) => {
+                const ru: any = rp?.user || {};
+                const ruIsObj = ru && typeof ru === 'object' && !('toHexString' in ru);
+                return {
+                    user: {
+                        name: ruIsObj ? (ru.name ?? 'Anonymous') : 'Anonymous',
+                        avatar: ruIsObj ? (ru.avatar?.url ?? '') : ''
+                    },
+                    comment: rp?.comment ?? ''
+                };
+            })
+        };
+    });
     return res.status(200).json({
         success: true,
         course: {
@@ -2193,7 +2218,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             isFree: course.isFree,
             purchased: course.purchased ?? 0,
             level: course.level?.name ?? null,
-            reviews: course.reviews || [],
+            reviews: shapedReviews,
             rating: course.rating ?? 0,
             category: course.category,
             subCategory: course.subCategory,

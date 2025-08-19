@@ -8,6 +8,7 @@ import mongoose, { Types } from 'mongoose';
 import QuizModel from '../models/Quiz.model';
 import LessonModel from '../models/Lesson.model';
 import { invalidateQuizzesCache } from './quiz.controller';
+import ProgressModel from '../models/Progress.model';
 
 export const createSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.courseId;
@@ -75,31 +76,62 @@ export const updateSection = catchAsync(async (req: Request, res: Response, next
     });
 });
 
-export const deleteSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const sectionId = req.params.sectionId;
+export const deleteSection = catchAsync(async (req, res, next) => {
+    const { sectionId } = req.params;
+    if (!sectionId) return next(new ErrorHandler('Section ID is required', 400));
 
-    if (!sectionId) {
-        return next(new ErrorHandler('Section ID is required', 400));
+    const sid = new Types.ObjectId(sectionId);
+
+    // Đảm bảo section tồn tại (không đụng tới courseId)
+    const exists = await SectionModel.exists({ _id: sid });
+    if (!exists) return next(new ErrorHandler('Section not found', 404));
+
+    // (Tuỳ bạn) Xoá dữ liệu con + gỡ khỏi Course
+    await LessonModel.deleteMany({ sectionId: sid });
+    await SectionModel.deleteOne({ _id: sid });
+    await CourseModel.updateMany({ sections: sid }, { $pull: { sections: sid } });
+
+    // 1) Lấy các Progress bị ảnh hưởng (có chứa section này)
+    const affectedIds = await ProgressModel.find({ 'completedSections.sectionId': sid }).distinct('_id');
+
+    // 2) Gỡ block progress của section đó
+    await ProgressModel.updateMany({ _id: { $in: affectedIds } }, { $pull: { completedSections: { sectionId: sid } } });
+
+    // 3) Recalc tổng cho các Progress bị ảnh hưởng
+    const cursor = ProgressModel.find({ _id: { $in: affectedIds } }).cursor();
+    for await (const prog of cursor as any) {
+        let totalLessons = 0;
+        let totalCompleted = 0;
+
+        for (const sp of prog.completedSections || []) {
+            const tl =
+                typeof sp.totalLessonsInSection === 'number'
+                    ? sp.totalLessonsInSection
+                    : Array.isArray(sp.lessons)
+                      ? sp.lessons.length
+                      : 0;
+
+            const cl =
+                typeof sp.completedLessons === 'number'
+                    ? sp.completedLessons
+                    : Array.isArray(sp.lessons)
+                      ? sp.lessons.filter((l: any) => l?.isCompleted).length
+                      : 0;
+
+            totalLessons += tl;
+            totalCompleted += cl;
+        }
+
+        prog.totalLessons = totalLessons;
+        prog.totalCompleted = totalCompleted;
+        prog.progressPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+        await prog.save();
     }
 
-    // Tìm section
-    const section = await SectionModel.findById(sectionId);
-    if (!section) {
-        return next(new ErrorHandler('Section not found', 404));
-    }
-
-    // Xóa section
-    await section.deleteOne();
-
-    // Xóa tất cả quiz thuộc section này
-    await QuizModel.deleteMany({ sectionId });
-
-    // Xóa sectionId khỏi tất cả course chứa nó
-    await CourseModel.updateMany({ sections: sectionId }, { $pull: { sections: sectionId } });
-
-    res.status(200).json({
+    return res.status(200).json({
         success: true,
-        message: 'Section and related quizzes deleted successfully'
+        message: 'Section deleted and progress updated'
     });
 });
 
