@@ -37,7 +37,6 @@ const CourseSchema = new Schema<ICourse>(
             public_id: String,
             url: String
         },
-        tags: String,
         level: { type: mongoose.Schema.Types.ObjectId, ref: 'Level' },
         demoUrl: {
             public_id: String,
@@ -61,10 +60,6 @@ const CourseSchema = new Schema<ICourse>(
         overview: {
             type: String,
             default: ''
-        },
-        topics: {
-            type: [String], // mảng chuỗi
-            default: []
         },
         duration: {
             type: Number,

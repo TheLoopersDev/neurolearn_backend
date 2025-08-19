@@ -373,7 +373,6 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
         category: course.category,
         subCategory: course.subCategory,
         overview: course.overview || '',
-        topics: Array.isArray(course.topics) ? course.topics : [],
         coursePackage: Array.isArray(course.coursePackage) ? course.coursePackage : [],
         totalLessons,
         durationText,
@@ -2223,7 +2222,6 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             category: course.category,
             subCategory: course.subCategory,
             overview: course.overview || '',
-            topics: Array.isArray(course.topics) ? course.topics : [],
             durationText,
             prerequisites: course.prerequisites,
             benefits: course.benefits,
@@ -2504,7 +2502,6 @@ export const getReviewCourseById = catchAsync(async (req: Request, res: Response
             category: course.category, // có thể là object hoặc id
             subCategory: course.subCategory,
             overview: course.overview || '',
-            topics: Array.isArray(course.topics) ? course.topics : [],
             durationText,
             prerequisites: course.prerequisites,
             benefits: course.benefits,

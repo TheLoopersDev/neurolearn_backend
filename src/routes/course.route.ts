@@ -370,7 +370,7 @@ router.get('/review/:id', isAuthenticated, updateAccessToken, getReviewCourseByI
  *       401:
  *         description: Not authenticated
  */
-router.post('/create-course', isAuthenticated, updateAccessToken, uploadCourse);
+router.post('/create-course', isAuthenticated, updateAccessToken, authorizeRoles('instructor', 'admin'), uploadCourse);
 
 /**
  * @swagger
@@ -413,6 +413,7 @@ router.put(
     '/update-course/:id',
     isAuthenticated,
     updateAccessToken,
+    authorizeRoles('instructor', 'admin'),
     updateCourse
 );
 
@@ -438,7 +439,13 @@ router.put(
  *       404:
  *         description: Course not found
  */
-router.put('/publish-course/:id', isAuthenticated, updateAccessToken, publishCourse);
+router.put(
+    '/publish-course/:id',
+    isAuthenticated,
+    updateAccessToken,
+    authorizeRoles('instructor', 'admin'),
+    publishCourse
+);
 
 /**
  * @swagger
@@ -462,7 +469,13 @@ router.put('/publish-course/:id', isAuthenticated, updateAccessToken, publishCou
  *       404:
  *         description: Course not found
  */
-router.put('/unpublish-course/:id', isAuthenticated, updateAccessToken, unpublishCourse);
+router.put(
+    '/unpublish-course/:id',
+    isAuthenticated,
+    updateAccessToken,
+    authorizeRoles('instructor', 'admin'),
+    unpublishCourse
+);
 
 /**
  * @swagger
@@ -484,7 +497,7 @@ router.get(
     '/instructor/all',
     isAuthenticated,
     updateAccessToken,
-    authorizeRoles('instructor', 'user'),
+    authorizeRoles('instructor', 'user','admin'),
     getAllUploadedAndPurchasedCoursesOfInstructor
 );
 
