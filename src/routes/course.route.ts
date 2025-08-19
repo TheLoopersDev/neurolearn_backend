@@ -39,7 +39,8 @@ import {
     getStudentStats,
     getInstructorCourseStats,
     getLatestCourseStatus,
-    getTopViewing
+    getTopViewing,
+    getAllAssignedCoursesOfUser
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -269,7 +270,22 @@ router.get('/:id/is-purchased', isAuthenticated, updateAccessToken, checkCourseP
  *         description: Not authenticated
  */
 router.get('/purchased/my-course', isAuthenticated, updateAccessToken, getAllPurchasedCoursesOfUser);
-// router.get('/purchased/:id', isAuthenticated, updateAccessToken, getPurchasedCourseByUser);
+
+/**
+ * @swagger
+ * /api/courses/assigned/my-course:
+ *   get:
+ *     summary: Get all Assigned courses of current user
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of assigned courses
+ *       401:
+ *         description: Not authenticated
+ */
+router.get('/assigned/my-course', isAuthenticated, updateAccessToken, getAllAssignedCoursesOfUser);
 
 /**
  * @swagger

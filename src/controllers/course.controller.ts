@@ -866,6 +866,107 @@ export const getAllPurchasedCoursesOfUser = catchAsync(async (req: Request, res:
     });
 });
 
+export const getAllAssignedCoursesOfUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const assignedCourses = req?.user?.assignedCourses;
+
+    if (!assignedCourses || assignedCourses.length === 0) {
+        console.log('❌ No assigned courses found for user');
+        return next(new ErrorHandler('No assigned courses found', 404));
+    }
+
+    // Lấy danh sách courseId từ assignedCourses
+    const courseIds = assignedCourses.map((ac: any) => ac.course);
+
+    // Lấy thông tin khóa học từ DB
+    const courses = await CourseModel.find({
+        _id: { $in: courseIds }
+    })
+        .populate('authorId', 'name email')
+        .populate('category', 'name')
+        .populate('subCategory', 'name')
+        .lean();
+
+    if (!courses || courses.length === 0) {
+        console.log('❌ Courses not found in database');
+        return next(new ErrorHandler('Courses not found', 404));
+    }
+
+    // Kiểm tra xem có course nào bị thiếu không
+    const foundCourseIds = courses.map((c: any) => c._id.toString());
+    const missingCourseIds = courseIds.filter((id) => !foundCourseIds.includes(id.toString()));
+    if (missingCourseIds.length > 0) {
+        console.log('⚠️ Missing courses:', missingCourseIds);
+        console.log('This might indicate courses were deleted but still exist in assignedCourses');
+    }
+
+    // Lọc bỏ những assigned courses có course không tồn tại
+    const validAssignedCourses = assignedCourses.filter((assigned: any) => {
+        const id = assigned.course.toString();
+        return foundCourseIds.includes(id);
+    });
+
+    if (validAssignedCourses.length === 0) {
+        console.log('❌ No valid assigned courses found after filtering');
+        return next(new ErrorHandler('No valid assigned courses found', 404));
+    }
+
+    // Gắn thêm progress + thông tin assignment
+    const coursesWithDetails = await Promise.all(
+        validAssignedCourses.map(async (assigned: any) => {
+            const course = courses.find((c: any) => c._id.toString() === assigned.course.toString());
+            if (!course) return null;
+
+            // Lấy tiến độ học
+            const progress = await ProgressModel.findOne({
+                course: course._id,
+                user: req.user._id
+            }).lean();
+
+            // Kiểm tra nếu progress không tồn tại hoặc bị lỗi
+            if (!progress || Array.isArray(progress)) {
+                return {
+                    ...course,
+                    sectionsCount: course.sections?.length || 0,
+                    duration: `${(course.duration / 60).toFixed(1)} hours`,
+                    progress: 0, // Nếu không có tiến độ, mặc định là 0%
+                    // thông tin từ assignedCourses
+                    startDate: assigned.startDate,
+                    dueDate: assigned.dueDate,
+                    status: assigned.status,
+                    assignedId: assigned._id
+                };
+            }
+
+            const totalLessons = progress?.totalLessons || 0;
+            const totalCompleted = progress?.totalCompleted || 0;
+            const progressPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+            const sectionsCount = course.sections?.length || 0;
+            const durationInHours = (course.duration / 60).toFixed(1);
+
+            return {
+                ...course,
+                sectionsCount,
+                duration: `${durationInHours} hours`,
+                progress: progressPercentage,
+                // thông tin từ assignedCourses
+                startDate: assigned.startDate,
+                dueDate: assigned.dueDate,
+                status: assigned.status,
+                assignedId: assigned._id
+            };
+        })
+    );
+
+    // Lọc bỏ null (trường hợp không tìm thấy course)
+    const validCourses = coursesWithDetails.filter(Boolean);
+
+    res.status(200).json({
+        success: true,
+        data: validCourses
+    });
+});
+
 // get uploaded course by instructor
 export const getUploadedCourseByInstructor = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const userCourseList = req.user?.uploadedCourses;
@@ -2398,7 +2499,6 @@ export const getReviewCourseById = catchAsync(async (req: Request, res: Response
         }
     });
 });
-
 
 export const checkCoursePurchased = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
