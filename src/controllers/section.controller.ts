@@ -8,7 +8,7 @@ import mongoose, { Types } from 'mongoose';
 import QuizModel from '../models/Quiz.model';
 import LessonModel from '../models/Lesson.model';
 import { invalidateQuizzesCache } from './quiz.controller';
-import ProgressModel from '@/models/Progress.model';
+import ProgressModel from '../models/Progress.model';
 
 export const createSection = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.courseId;

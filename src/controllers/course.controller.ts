@@ -394,7 +394,7 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
                   _id: r._id,
                   rating: r.rating,
                   comment: r.comment,
-                  user: { name: r.user?.name || '', avatar: r.user?.avatar || '' },
+                  user: { name: r.user?.name || '', avatar: r.user?.avatar || '', createdAt: r.user?.createdAt || '' },
                   commentReplies: Array.isArray(r.commentReplies) ? r.commentReplies : []
               }))
             : []

@@ -6,8 +6,8 @@ import SectionModel from '../models/Section.model';
 import ErrorHandler from '../utils/ErrorHandler';
 import { redis } from '../utils/redis';
 import cloudinary from 'cloudinary';
-import mongoose, { Types } from 'mongoose';
-import ProgressModel from '@/models/Progress.model';
+import { Types } from 'mongoose';
+import ProgressModel from '../models/Progress.model';
 // Create a lesson within a section
 export const createLesson = catchAsync(async (req: Request, res: Response, next) => {
     const courseId = req.params.courseId;
