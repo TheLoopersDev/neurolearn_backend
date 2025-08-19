@@ -1081,19 +1081,15 @@ export const addReview = catchAsync(async (req: Request, res: Response, next: Ne
     }
 
     // 3) Chuẩn bị dữ liệu review
-    const reviewData = {
-        user: req.user?._id, // ObjectId
-        rating,
-        comment: review?.trim() ?? ''
-    };
+    const reviewData = { user: req.user!._id, rating, comment: review?.trim() ?? '' };
 
-    // 4) Thêm review CHỈ khi user CHƯA review (atomic)
-    //    Nếu đã tồn tại review của user => findOneAndUpdate sẽ trả về null
-    const updatedCourse = await CourseModel.findOneAndUpdate(
-        { _id: courseId, 'reviews.user': { $ne: req.user?._id } },
+    let updatedCourse = await CourseModel.findOneAndUpdate(
+        { _id: courseId, 'reviews.user': { $ne: req.user!._id } },
         { $push: { reviews: reviewData } },
-        { new: true, projection: { reviews: 1, name: 1, authorId: 1, rating: 1 } }
-    );
+        { new: true }
+    )
+        .select('reviews name authorId rating')
+        .populate({ path: 'reviews.user', select: 'name avatar' });
 
     if (!updatedCourse) {
         // Có thể do: course không tồn tại HOẶC user đã review
@@ -1818,6 +1814,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
         { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce' },
         { path: 'level', select: 'name' },
         { path: 'category', select: 'name' },
+        { path: 'reviews.user', select: 'name avatar' },
         { path: 'subCategory', select: 'name' }
     ]);
     if (!course) return next(new ErrorHandler('Course not found', 404));
@@ -2079,7 +2076,33 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     const durationText = `${hours}h ${minutes}m`;
 
     dbg('response.progress', progressSummary);
+    // --- shape reviews to include user.name & user.avatar (works with embedded snapshots) ---
+    const shapedReviews = (Array.isArray(course.reviews) ? course.reviews : []).map((r: any) => {
+        const u: any = r?.user || {};
+        const isObj = u && typeof u === 'object' && !('toHexString' in u); // not a plain ObjectId
 
+        const name = isObj ? (u.name ?? 'Anonymous') : 'Anonymous';
+        const avatarUrl = isObj ? (u.avatar?.url ?? '') : '';
+
+        return {
+            _id: String(r?._id ?? ''),
+            rating: Number(r?.rating ?? 0),
+            comment: r?.comment ?? '',
+            createdAt: r?.createdAt ?? undefined,
+            user: { name, avatar: { url: avatarUrl } },
+            commentReplies: (Array.isArray(r?.commentReplies) ? r.commentReplies : []).map((rp: any) => {
+                const ru: any = rp?.user || {};
+                const ruIsObj = ru && typeof ru === 'object' && !('toHexString' in ru);
+                return {
+                    user: {
+                        name: ruIsObj ? (ru.name ?? 'Anonymous') : 'Anonymous',
+                        avatar: ruIsObj ? (ru.avatar?.url ?? '') : ''
+                    },
+                    comment: rp?.comment ?? ''
+                };
+            })
+        };
+    });
     return res.status(200).json({
         success: true,
         course: {
@@ -2094,7 +2117,7 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             isFree: course.isFree,
             purchased: course.purchased ?? 0,
             level: course.level?.name ?? null,
-            reviews: course.reviews || [],
+            reviews: shapedReviews,
             rating: course.rating ?? 0,
             category: course.category,
             subCategory: course.subCategory,
