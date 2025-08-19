@@ -17,6 +17,7 @@ import {
     removeItemFromSection
 } from '../controllers/section.controller';
 import { ensureCourseEditable } from '../middlewares/ensureCourseEditable';
+import { authorizeRoles } from '@/middlewares/auth/authorizeRoles';
 
 const router = express.Router();
 
@@ -60,7 +61,13 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSection);
+router.post(
+    '/create/:courseId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    createSection
+);
 
 /**
  * @swagger
@@ -104,7 +111,7 @@ router.post('/create/:courseId', updateAccessToken, isAuthenticated, createSecti
  *       500:
  *         description: Internal server error
  */
-router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
+router.put('/update/:id', updateAccessToken, isAuthenticated, authorizeRoles('instructor', 'admin'), updateSection);
 
 /**
  * @swagger
@@ -138,6 +145,7 @@ router.delete(
     updateAccessToken,
     isAuthenticated,
     ensureCourseEditable({ allowAdminOverride: true }),
+    authorizeRoles('instructor', 'admin'),
     deleteSection
 );
 
@@ -166,9 +174,21 @@ router.delete(
  *       500:
  *         description: Internal server error
  */
-router.get('/course/:courseId', updateAccessToken, isAuthenticated, getAllSections);
+router.get(
+    '/course/:courseId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    getAllSections
+);
 
-router.get('/review/:courseId', updateAccessToken, isAuthenticated, getCurriculumByCourseId);
+router.get(
+    '/review/:courseId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    getCurriculumByCourseId
+);
 
 /**
  * @swagger
@@ -233,7 +253,7 @@ router.get('/user/', updateAccessToken, isAuthenticated, getSectionsByUserId);
  *       500:
  *         description: Internal server error
  */
-router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
+router.put('/reorder', updateAccessToken, isAuthenticated, authorizeRoles('instructor', 'admin'), reorderSections);
 
 /**
  * @swagger
@@ -267,6 +287,7 @@ router.put(
     updateAccessToken,
     isAuthenticated,
     ensureCourseEditable({ allowAdminOverride: true }),
+    authorizeRoles('instructor', 'admin'),
     publishSection
 );
 
@@ -302,6 +323,7 @@ router.put(
     updateAccessToken,
     isAuthenticated,
     ensureCourseEditable({ allowAdminOverride: true }),
+    authorizeRoles('instructor', 'admin'),
     unpublishSection
 );
 
@@ -330,7 +352,13 @@ router.put(
  *       404:
  *         description: Section not found
  */
-router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionDetail);
+router.get(
+    '/detail/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    getSectionDetail
+);
 
 /**
  * Hủy công khai section
@@ -347,10 +375,16 @@ router.get('/detail/:sectionId', updateAccessToken, isAuthenticated, getSectionD
  */
 // router.get('/:sectionId', isAuthenticated, getSectionDetail);
 
-router.patch('/:id/add-quiz', updateAccessToken, isAuthenticated, addQuizToSection);
+router.patch('/:id/add-quiz', updateAccessToken, isAuthenticated, authorizeRoles('instructor','admin'), addQuizToSection);
 
-router.patch('/:id/reorder', updateAccessToken, isAuthenticated, reorderSection);
+router.patch('/:id/reorder', updateAccessToken, isAuthenticated, authorizeRoles('instructor', 'admin'), reorderSection);
 
-router.patch('/:id/remove-item', updateAccessToken, isAuthenticated, removeItemFromSection);
+router.patch(
+    '/:id/remove-item',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    removeItemFromSection
+);
 
 export default router;
