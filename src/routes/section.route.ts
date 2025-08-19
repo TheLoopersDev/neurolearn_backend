@@ -16,6 +16,7 @@ import {
     reorderSection,
     removeItemFromSection
 } from '../controllers/section.controller';
+import { ensureCourseEditable } from '../middlewares/ensureCourseEditable';
 
 const router = express.Router();
 
@@ -132,7 +133,13 @@ router.put('/update/:id', updateAccessToken, isAuthenticated, updateSection);
  *       500:
  *         description: Internal server error
  */
-router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSection);
+router.delete(
+    '/delete/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: true }),
+    deleteSection
+);
 
 /**
  * @swagger
@@ -162,7 +169,6 @@ router.delete('/delete/:sectionId', updateAccessToken, isAuthenticated, deleteSe
 router.get('/course/:courseId', updateAccessToken, isAuthenticated, getAllSections);
 
 router.get('/review/:courseId', updateAccessToken, isAuthenticated, getCurriculumByCourseId);
-
 
 /**
  * @swagger
@@ -256,7 +262,13 @@ router.put('/reorder', updateAccessToken, isAuthenticated, reorderSections);
  *       500:
  *         description: Internal server error
  */
-router.put('/publish/:sectionId', updateAccessToken, isAuthenticated, publishSection);
+router.put(
+    '/publish/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: true }),
+    publishSection
+);
 
 /**
  * @swagger
@@ -285,7 +297,13 @@ router.put('/publish/:sectionId', updateAccessToken, isAuthenticated, publishSec
  *       500:
  *         description: Internal server error
  */
-router.put('/unpublish/:sectionId', updateAccessToken, isAuthenticated, unpublishSection);
+router.put(
+    '/unpublish/:sectionId',
+    updateAccessToken,
+    isAuthenticated,
+    ensureCourseEditable({ allowAdminOverride: true }),
+    unpublishSection
+);
 
 /**
  * @swagger

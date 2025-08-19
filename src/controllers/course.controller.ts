@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import cloudinary from 'cloudinary';
 import ejs from 'ejs';
 
@@ -80,10 +80,105 @@ export const getCoursesWithSort = catchAsync(async (req: Request, res: Response,
     });
 });
 
-export const uploadCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const data = req.body;
+// data URI
+const DATA_URI_RE = /^data:(image|video|application)\/[a-zA-Z0-9.+-]+;base64,/i;
+const MEDIA_KEYS = new Set([
+    'thumbnail',
+    'image',
+    'banner',
+    'cover',
+    'avatar',
+    'poster',
+    'logo',
+    'video',
+    'file',
+    'source'
+]);
 
-    createCourse(data, req, res, next);
+function isDataUri(x: any): x is string {
+    return typeof x === 'string' && DATA_URI_RE.test(x);
+}
+
+// UPLOAD 1 chuỗi base64 -> Cloudinary
+async function uploadDataUri(dataUri: string) {
+    const cleaned = dataUri.replace(/\s/g, '');
+    const up = await cloudinary.v2.uploader.upload(cleaned, {
+        folder: 'courses',
+        resource_type: 'auto'
+    });
+    return { public_id: up.public_id, url: up.secure_url };
+}
+
+// ĐỆ QUY chuẩn hoá: bảo toàn ObjectId/Date/Buffer, xử lý key 'url' và key media
+async function normalizeDeep(node: any): Promise<any> {
+    if (Array.isArray(node)) {
+        const out: any[] = [];
+        for (let i = 0; i < node.length; i++) out.push(await normalizeDeep(node[i]));
+        return out;
+    }
+
+    // bảo toàn các kiểu đặc biệt
+    if (node instanceof Types.ObjectId || node instanceof Date || Buffer.isBuffer(node)) return node;
+
+    if (node && typeof node === 'object') {
+        const out: any = {};
+        for (const [k, v] of Object.entries(node)) {
+            // Đừng đụng vào các field id
+            if (k === '_id' || k === 'authorId' || k.endsWith('Id')) {
+                out[k] = v;
+                continue;
+            }
+
+            if (typeof v === 'string' && isDataUri(v)) {
+                const uploaded = await uploadDataUri(v);
+
+                if (k.toLowerCase() === 'url') {
+                    // url: base64 -> chỉ lấy secure_url (String)
+                    out[k] = uploaded.url;
+                    // nếu object cha có public_id, set thêm cho tiện xoá sau
+                    if (!('public_id' in out)) out.public_id = uploaded.public_id;
+                } else if (MEDIA_KEYS.has(k.toLowerCase())) {
+                    // thumbnail/image/banner: base64 string -> đổi thành object {public_id, url}
+                    out[k] = { public_id: uploaded.public_id, url: uploaded.url };
+                } else {
+                    // field khác là string base64 -> an toàn nhất là dùng URL string
+                    out[k] = uploaded.url;
+                }
+            } else {
+                out[k] = await normalizeDeep(v);
+            }
+        }
+        return out;
+    }
+
+    // string bình thường / number / boolean...
+    return node;
+}
+
+// tìm mọi path còn 'data:' (để chặn)
+function findDataUriPaths(input: any, path = '$'): string[] {
+    const rs: string[] = [];
+    if (Array.isArray(input)) {
+        input.forEach((v, i) => rs.push(...findDataUriPaths(v, `${path}[${i}]`)));
+    } else if (input && typeof input === 'object') {
+        for (const [k, v] of Object.entries(input)) rs.push(...findDataUriPaths(v, `${path}.${k}`));
+    } else if (typeof input === 'string' && input.startsWith('data:')) {
+        rs.push(path);
+    }
+    return rs;
+}
+
+export const uploadCourse = catchAsync(async (req, res, next) => {
+    // normalize TOÀN PAYLOAD trước
+    const cleaned = await normalizeDeep(req.body);
+
+    // CHỐT CHẶN: còn 'data:' ở đâu là báo lỗi
+    const bad = findDataUriPaths(cleaned);
+    if (bad.length) return next(new ErrorHandler(`Invalid base64 at: ${bad.join(', ')}`, 400));
+
+    // ghi đè body đã sạch cho createCourse
+    req.body = cleaned;
+    return createCourse(cleaned, req, res, next);
 });
 
 export const updateCourse = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -307,7 +402,6 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
 
     return res.status(200).json({ success: true, courses: responseCourse });
 });
-
 
 export const getCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
@@ -1172,9 +1266,6 @@ export const deleteCourse = catchAsync(async (req: Request, res: Response, next:
     }
 });
 
-
-
-
 //get courses -- pagination
 
 export const getCoursesLimitWithPagination = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
@@ -2008,6 +2099,8 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
             overview: course.overview || '',
             topics: Array.isArray(course.topics) ? course.topics : [],
             durationText,
+            prerequisites: course.prerequisites,
+            benefits: course.benefits,
             totalLessons,
             sections: processedSections, // đã MIX & có quiz progress
             progress: progressSummary, // có cả legacy (lessons) & all-items
@@ -2025,63 +2118,287 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     });
 });
 
+// Lấy toàn bộ dữ liệu cho trang Review: gồm cả section/lesson DRAFT
 export const getReviewCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const courseId = req.params.id;
+    const dbgOn = process.env.QUIZ_DEBUG === '1';
+    const dbg = (label: string, payload?: any) => {
+        if (!dbgOn) return;
+        try {
+            const safe = payload && typeof payload === 'object' ? JSON.parse(JSON.stringify(payload)) : payload;
+            console.log(`[COURSE:review] ${label}`, safe);
+        } catch {
+            console.log(`[COURSE:review] ${label}`, payload);
+        }
+    };
 
-    if (!courseId) {
-        return next(new ErrorHandler('Please provide course id', 400));
-    }
+    const courseId = req.params.id as string;
+    const userId = req.user?._id as string | undefined;
+    if (!courseId) return next(new ErrorHandler('Please provide course id', 400));
 
+    // 0) Course + quyền truy cập (admin hoặc chủ khóa)
     const course = await CourseModel.findById(courseId).populate([
-        { path: 'category', select: 'name' },
-        { path: 'level', select: 'name' }
+        { path: 'authorId', select: 'name email avatar profession description uploadedCourses introduce role' },
+        { path: 'level', select: 'name' },
+        { path: 'category', select: 'name title' },
+        { path: 'subCategory', select: 'name' }
     ]);
+    if (!course) return next(new ErrorHandler('Course not found', 404));
 
-    if (!course) {
-        return next(new ErrorHandler('Course not found', 404));
+    const isOwner = String(course.authorId?._id ?? course.authorId) === String(userId);
+    const role = (req.user as any)?.role;
+    const isAdmin = role === 'admin' || role === 'superadmin';
+    if (!isOwner && !isAdmin) {
+        // chỉ cho tác giả khóa hoặc admin xem bản review (có draft)
+        return next(new ErrorHandler('Forbidden', 403));
     }
 
-    const sections = await SectionModel.find({
-        _id: { $in: course.sections },
-        isPublished: true
-    })
+    // 1) Sections: KHÔNG lọc isPublished -> lấy cả draft lẫn publish
+    const sections = await SectionModel.find({ _id: { $in: course.sections } })
         .sort({ order: 1 })
-        .populate({
-            path: 'lessons',
-            match: { isPublished: true },
-            options: { sort: { order: 1 } }
-        })
-        .lean();
+        .select('_id title order courseId isPublished')
+        .lean<any[]>();
 
-    const curriculum = sections.map((section) => ({
-        id: section.id,
-        title: section.title,
-        lessons: Array.isArray(section.lessons)
-            ? section.lessons.map((lesson: any) => ({
-                  id: lesson._id,
-                  type: lesson.type,
-                  title: lesson.title,
-                  url: lesson.videoUrl.url || lesson.documentUrl || '',
-                  thumbnail: lesson.thumbnail || ''
-              }))
-            : []
-    }));
+    const sectionIds = sections.map((s) => s._id);
+
+    // 2) Lessons: KHÔNG lọc isPublished -> gồm cả draft
+    const lessons = await LessonModel.find({ sectionId: { $in: sectionIds } })
+        .select('_id title order videoLength videoUrl sectionId isPublished isFree thumbnail')
+        .lean<any[]>();
+
+    // 3) Quizzes: (giữ nguyên, kèm isPublished để FE biết là draft/publish)
+    const quizzes = await QuizModel.find({ sectionId: { $in: sectionIds } })
+        .select(
+            '_id sectionId order name examTitle duration difficulty totalQuestions isPublished passingScore userScores.user userScores.score userScores.attemptedAt'
+        )
+        .lean<any[]>();
+
+    // 4) Progress: seed theo bài đã publish (đúng logic học), draft không tính vào progress
+    let progressDoc: any = null;
+    if (userId) progressDoc = await ensureProgressSeeded(String(userId), String(courseId));
+
+    const completedMap = new Map<string, Set<string>>();
+    for (const sec of progressDoc?.completedSections || []) {
+        const sid = String(sec.sectionId);
+        const set = new Set<string>();
+        for (const l of sec.lessons || []) if (l?.isCompleted) set.add(String(l.lessonId));
+        completedMap.set(sid, set);
+    }
+
+    // 4b) Quiz progress (latest attempt) — y như detail
+    const quizProgressMap = new Map<
+        string,
+        {
+            attempts: number;
+            lastScore: number | null;
+            bestScore: number | null;
+            lastAttemptAt: Date | null;
+            isCompleted: boolean;
+            isPassed: boolean;
+            latestAttempt?: { attemptId?: string; score: number; attemptedAt: Date | null; percentage?: number };
+            passingScore?: number;
+        }
+    >();
+
+    if (Array.isArray(quizzes) && userId) {
+        for (const q of quizzes) {
+            const attempts = (Array.isArray(q.userScores) ? q.userScores : [])
+                .filter((s: any) => String(s?.user) === String(userId))
+                .sort((a: any, b: any) => {
+                    const ta = a?.attemptedAt ?? a?.createdAt ?? 0;
+                    const tb = b?.attemptedAt ?? b?.createdAt ?? 0;
+                    return new Date(tb).getTime() - new Date(ta).getTime();
+                });
+
+            if (attempts.length === 0) continue;
+
+            const latest = attempts[0];
+            const lastScore = Number(latest?.score ?? 0);
+            const bestScore = Math.max(...attempts.map((a: any) => Number(a?.score ?? 0)));
+            const lastAttemptAt = latest?.attemptedAt
+                ? new Date(latest.attemptedAt)
+                : latest?.createdAt
+                  ? new Date(latest.createdAt)
+                  : null;
+            const passingScore = Number(q.passingScore ?? 0);
+            const isPassed = lastScore >= passingScore;
+            const percentage = q?.totalQuestions ? Math.round((lastScore / Number(q.totalQuestions)) * 100) : undefined;
+
+            quizProgressMap.set(String(q._id), {
+                attempts: attempts.length,
+                lastScore,
+                bestScore,
+                lastAttemptAt,
+                isCompleted: true,
+                isPassed,
+                passingScore,
+                latestAttempt: {
+                    attemptId: latest?._id ? String(latest._id) : undefined,
+                    score: lastScore,
+                    attemptedAt: lastAttemptAt,
+                    percentage
+                }
+            });
+        }
+    }
+
+    // 5) Group theo section
+    const lessonsBySection: Record<string, any[]> = Object.create(null);
+    const quizzesBySection: Record<string, any[]> = Object.create(null);
+    for (const sid of sectionIds) {
+        lessonsBySection[String(sid)] = [];
+        quizzesBySection[String(sid)] = [];
+    }
+    for (const l of lessons) lessonsBySection[String(l.sectionId)].push(l);
+    for (const q of quizzes) quizzesBySection[String(q.sectionId)].push(q);
+
+    // 6) Build section items (có cờ isDraft cho FE)
+    const processedSections = sections.map((section: any) => {
+        const sid = String(section._id);
+        const doneSet = completedMap.get(sid) ?? new Set<string>();
+
+        // Lessons: giữ videoUrl, thêm isCompleted (chỉ meaningful với published), và isDraft
+        const secLessons = (lessonsBySection[sid] || [])
+            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+            .map((l: any) => ({
+                ...l,
+                isCompleted: l.isPublished ? doneSet.has(String(l._id)) : false,
+                isDraft: !l.isPublished
+            }));
+
+        // Quizzes: thêm isDraft + progress info
+        const secQuizzes = (quizzesBySection[sid] || [])
+            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+            .map((q: any) => {
+                const qp = quizProgressMap.get(String(q._id));
+                const title = q.name ?? q.examTitle ?? 'Untitled quiz';
+                return {
+                    ...q,
+                    isDraft: !q.isPublished,
+                    isCompleted: !!qp,
+                    isPassed: !!qp?.isPassed,
+                    lastScore: qp?.lastScore ?? null,
+                    bestScore: qp?.bestScore ?? null,
+                    attempts: qp?.attempts ?? 0,
+                    lastAttemptAt: qp?.lastAttemptAt ?? null,
+                    name: title,
+                    title
+                };
+            });
+
+        // Merge thành items
+        const lessonItems = secLessons.map((l: any) => ({
+            kind: 'lesson' as const,
+            _id: l._id,
+            order: typeof l.order === 'number' ? l.order : 0,
+            title: l.title,
+            isDraft: !l.isPublished,
+            payload: l
+        }));
+        const quizItems = secQuizzes.map((q: any) => ({
+            kind: 'quiz' as const,
+            _id: q._id,
+            order: typeof q.order === 'number' ? q.order : 0,
+            title: q.title,
+            isDraft: !q.isPublished,
+            payload: q
+        }));
+        const items = [...lessonItems, ...quizItems].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        // Progress theo lesson PUBLISHED (giữ đúng hành vi học)
+        const publishedLessons = secLessons.filter((l: any) => l.isPublished);
+        const completedLessonsCount = publishedLessons.filter((l: any) => l.isCompleted).length;
+        const totalLessonsInSection = publishedLessons.length;
+        const sectionProgressPercentage = totalLessonsInSection
+            ? Math.round((completedLessonsCount / totalLessonsInSection) * 100)
+            : 0;
+
+        return {
+            _id: section._id,
+            title: section.title,
+            order: section.order,
+            isDraft: !section.isPublished, // cờ draft cho section
+            lessons: secLessons,
+            quizzes: secQuizzes,
+            items,
+            completedCount: completedLessonsCount,
+            totalLessonsInSection,
+            sectionProgressPercentage
+        };
+    });
+
+    // 7) Tổng số lesson publish (progress chuẩn)
+    const totalLessons = processedSections.reduce((sum, s) => sum + (s.totalLessonsInSection || 0), 0);
+    const totalQuizzes = processedSections.reduce((sum, s) => sum + (s.quizzes?.length || 0), 0);
+
+    // 8) Tổng quan progress (lessons published only)
+    let progressSummary: any = null;
+    if (userId) {
+        const totalCompletedLessons = processedSections.reduce((acc, s) => acc + (s.completedCount || 0), 0);
+        const progressLessonsOnly = totalLessons ? Math.round((totalCompletedLessons / totalLessons) * 100) : 0;
+        progressSummary = {
+            totalLessons,
+            totalCompleted: totalCompletedLessons,
+            progressPercentage: progressLessonsOnly
+        };
+    }
+
+    // 9) Publisher stats
+    const instructorCourseIds = course.authorId?.uploadedCourses || [];
+    const instructorCourses = instructorCourseIds.length
+        ? await CourseModel.find({ _id: { $in: instructorCourseIds } }, 'purchased').lean()
+        : [];
+    const totalStudents = instructorCourses.reduce((sum, c: any) => sum + (c.purchased || 0), 0);
+    const totalCourses = instructorCourseIds.length;
+
+    // Duration -> "Xh Ym"
+    const durationInMinutes = typeof course.duration === 'number' ? course.duration : 0;
+    const hours = Math.floor(durationInMinutes / 60);
+    const minutes = durationInMinutes % 60;
+    const durationText = `${hours}h ${minutes}m`;
+
+    dbg('response.review.progress', progressSummary);
 
     return res.status(200).json({
         success: true,
+        mode: 'review', // để FE biết đây là response review
         course: {
-            title: course.name,
-            category: course.category?.name || '',
-            skillLevel: course.level?.name || '',
-            tags: course.tags?.split(',') || [],
-            originalPrice: course.estimatedPrice,
-            salePrice: course.price,
+            _id: course._id,
+            name: course.name,
+            subTitle: course.subTitle,
             description: course.description,
-            thumbnail: course.thumbnail?.url || '',
-            curriculum
+            thumbnail: course.thumbnail,
+            demoUrl: course.demoUrl,
+            price: course.price,
+            estimatedPrice: course.estimatedPrice,
+            isFree: course.isFree,
+            purchased: course.purchased ?? 0,
+            level: course.level?.name ?? null,
+            reviews: course.reviews || [],
+            rating: course.rating ?? 0,
+            category: course.category, // có thể là object hoặc id
+            subCategory: course.subCategory,
+            overview: course.overview || '',
+            topics: Array.isArray(course.topics) ? course.topics : [],
+            durationText,
+            prerequisites: course.prerequisites,
+            benefits: course.benefits,
+            totalLessons,
+            sections: processedSections, // đã gồm draft + published + isDraft flags
+            progress: progressSummary,
+            publisher: {
+                name: course.authorId?.name || '',
+                avatar: course.authorId?.avatar || '',
+                email: course.authorId?.email || '',
+                profession: course.authorId?.profession || '',
+                description: course.authorId?.introduce || '',
+                rating: course.rating ?? 0,
+                students: totalStudents,
+                courses: totalCourses
+            }
         }
     });
 });
+
 
 export const checkCoursePurchased = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
