@@ -6,12 +6,28 @@ import Withdraw from '../models/Withdraw.model';
 import ErrorHandler from '../utils/ErrorHandler';
 
 export const createWithdraw = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const {
+    amount,
+    bankName,
+    bankAccountNumber,
+    bankAccountName,
+    accountNumber,
+    accountName,
+    bank,
+    reason
+  } = req.body as any;
+
+  const resolvedBankName = bankName ?? bank?.name;
+  const resolvedBankAccountNumber = bankAccountNumber ?? accountNumber ?? bank?.accountNumber;
+  const resolvedBankAccountName = bankAccountName ?? accountName ?? bank?.accountName;
+
   const withdraw = await Withdraw.create({
     user: req.user._id.toString(),
-    amount: req.body.amount,
-    bankName: req.body.bankName,
-    accountNumber: req.body.accountNumber,
-    accountName: req.body.accountName
+    amount,
+    bankName: resolvedBankName,
+    bankAccountNumber: resolvedBankAccountNumber,
+    bankAccountName: resolvedBankAccountName,
+    reason
   });
 
   res.status(201).json({

@@ -653,7 +653,12 @@ router.delete('/delete-user:id', isAuthenticated, authorizeRoles('admin'), delet
  *       404:
  *         description: User not found
  */
-router.get('/dashboard/:userId', updateAccessToken, isAuthenticated, getUserDashboardData);
+router.get(
+    '/dashboard/:userId',
+    updateAccessToken,
+    isAuthenticated,
+    getUserDashboardData
+);
 
 router.get('/purchase-course-mobile', getUserPurchasedCoursesMobile);
 

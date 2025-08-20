@@ -15,6 +15,7 @@ import {
 import { updateAccessToken } from '../controllers/user.controller';
 import { upload } from '../middlewares/upload';
 import { ensureLessonDeletable } from '../middlewares/ensureCourseEditable';
+import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 
 const router = express.Router();
 
@@ -82,7 +83,7 @@ const router = express.Router();
  *         description: Course or Section not found
  */
 
-router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, createLesson);
+router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, authorizeRoles('instructor','admin'), createLesson);
 
 /**
  * ..swagger
@@ -108,7 +109,7 @@ router.post('/create/:courseId/:sectionId', updateAccessToken, isAuthenticated, 
  *         description: Section not found
  */
 
-router.get('/section/:sectionId', updateAccessToken, isAuthenticated, getAllLessons);
+router.get('/section/:sectionId', updateAccessToken, isAuthenticated, authorizeRoles('instructor','admin'), getAllLessons);
 
 /**
  * ..swagger
@@ -184,7 +185,13 @@ router.get('/:lessonId', updateAccessToken, isAuthenticated, getLessonById);
  *         description: Lesson not found
  */
 
-router.put('/update/:lessonId', updateAccessToken, isAuthenticated, updateLesson);
+router.put(
+    '/update/:lessonId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    updateLesson
+);
 
 /**
  * ..swagger
@@ -215,6 +222,7 @@ router.delete(
     updateAccessToken,
     isAuthenticated,
     ensureLessonDeletable({ allowAdminOverride: true }),
+    authorizeRoles('instructor', 'admin'),
     deleteLesson
 );
 
@@ -264,6 +272,7 @@ router.put(
     '/reorder/:sectionId',
     updateAccessToken,
     isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
     reorderLesson
 );
 
@@ -291,7 +300,13 @@ router.put(
  *         description: Lesson not found
  */
 
-router.put('/publish/:lessonId', updateAccessToken, isAuthenticated, publishLesson);
+router.put(
+    '/publish/:lessonId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    publishLesson
+);
 
 /**
  * ..swagger
@@ -317,7 +332,13 @@ router.put('/publish/:lessonId', updateAccessToken, isAuthenticated, publishLess
  *         description: Lesson not found
  */
 
-router.put('/unpublish/:lessonId', updateAccessToken, isAuthenticated, unpublishLesson);
+router.put(
+    '/unpublish/:lessonId',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('instructor', 'admin'),
+    unpublishLesson
+);
 
 export default router;
 

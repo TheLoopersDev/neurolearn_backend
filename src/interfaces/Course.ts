@@ -29,7 +29,6 @@ export interface ICourse extends Document {
         url: string;
     };
     authorId: Types.ObjectId;
-    tags?: string;
     level?: Types.ObjectId;
     benefits?: { title: string }[];
     prerequisites?: { title: string }[];
@@ -44,7 +43,6 @@ export interface ICourse extends Document {
     category: Types.ObjectId;
     subCategory: Types.ObjectId;
     overview: string;
-    topics: string[];
     duration: {
         type: Number;
         default: 0;
@@ -116,7 +114,6 @@ export interface ICourseDetail
     category?: any;
     subCategory?: any;
     overview: string;
-    topics: string[];
     sections: Array<{
         _id: string;
         title: string;

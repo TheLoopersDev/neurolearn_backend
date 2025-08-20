@@ -15,6 +15,7 @@ import {
 } from '../controllers/quiz.controller';
 import { isAuthenticated } from '../middlewares/auth/isAuthenticated';
 import { updateAccessToken } from '../controllers/user.controller';
+import { uploadQuizCover } from '../middlewares/upload';
 
 /**
  * @swagger
@@ -101,7 +102,7 @@ router.get('/:id', updateAccessToken, isAuthenticated, getQuizById);
 router.get('/', updateAccessToken, isAuthenticated, getAllQuizzes);
 
 // PUT /api/quizzes/:quizId - Update a quiz
-router.put('/:id', updateAccessToken, isAuthenticated, updateQuiz);
+router.put('/:id', updateAccessToken, isAuthenticated, uploadQuizCover, updateQuiz);
 
 // DELETE /api/quizzes/:quizId - Delete a quiz
 router.delete('/:id', updateAccessToken, isAuthenticated, deleteQuiz);
