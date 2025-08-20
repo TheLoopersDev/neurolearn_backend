@@ -337,10 +337,16 @@ export const updateBusinessInfo = catchAsync(async (req: Request, res: Response,
 });
 
 export const checkEmployeeProgressDaily = () => {
-    cron.schedule('* 7 * * *', async () => {
-        const users = await UserModel.find({
-            assignedCourses: { $exists: true, $ne: [] }
-        });
+    cron.schedule('0 7 * * *', async () => {
+        const users = await UserModel.find(
+            {
+                assignedCourses: { $exists: true, $ne: [] }
+            },
+            {
+                scheduled: true,
+                timezone: 'Asia/Ho_Chi_Minh'
+            }
+        );
 
         for (const user of users) {
             const behindCourses: string[] = [];
@@ -817,9 +823,15 @@ export const getBusinessStatisticsForAdmin = catchAsync(async (req: Request, res
 export const removeExpiredAssignedCoursesDaily = () => {
     // Chạy vào 00:00 hằng ngày
     cron.schedule('0 0 * * *', async () => {
-        const users = await UserModel.find({
-            assignedCourses: { $exists: true, $ne: [] }
-        });
+        const users = await UserModel.find(
+            {
+                assignedCourses: { $exists: true, $ne: [] }
+            },
+            {
+                scheduled: true,
+                timezone: 'Asia/Ho_Chi_Minh'
+            }
+        );
 
         const now = new Date();
 
