@@ -30,7 +30,13 @@ const OrderSchema = new Schema<IOrder>(
         },
         price: { type: Number, required: true },
         discountCode: { type: String, default: null },
-        orderCode: { type: Number, required: true, unique: true }
+        orderCode: { type: Number, required: true, unique: true },
+        status: {
+            type: String,
+            enum: ['pending', 'paid', 'cancelled', 'completed'],
+            default: 'pending',
+            required: true
+        }
     },
     { timestamps: true }
 );

@@ -191,7 +191,9 @@ export const getUserOrders = catchAsync(async (req: Request, res: Response, next
         });
     }
 
-    const orders = await OrderModel.find({ userId, userType }).populate({ path: 'courseIds' }).sort({ createdAt: -1 });
+    const orders = await OrderModel.find({ userId, userType, status: 'completed' })
+        .populate({ path: 'courseIds' })
+        .sort({ createdAt: -1 });
 
     res.status(200).json({
         success: true,

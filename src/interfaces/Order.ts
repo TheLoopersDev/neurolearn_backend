@@ -9,6 +9,7 @@ export interface IOrder extends Document {
     price: number;
     discountCode?: string | null;
     orderCode: number;
+    status: 'pending' | 'completed';
     createdAt?: Date;
     updatedAt?: Date;
 }
