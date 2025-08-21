@@ -55,8 +55,9 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<vo
             payment_info: 'PayOS',
             orderCode,
             discountCode: discountCode || null,
-            price: amount, // chỉ lưu giá đã giảm
-            userType
+            price: amount,
+            userType,
+            status: 'pending'
         });
 
         res.json({ checkoutUrl: paymentLinkRes.checkoutUrl });
@@ -87,6 +88,8 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             res.status(404).send('Order not found');
             return;
         }
+         order.status = 'completed';
+         await order.save();
 
         const user = await UserModel.findById(order.userId);
         if (!user) {
