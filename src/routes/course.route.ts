@@ -682,7 +682,7 @@ router.delete(
     isAuthenticated,
     updateAccessToken,
     authorizeRoles('instructor', 'admin'),
-    ensureCourseEditable({ allowAdminOverride: false }),
+    ensureCourseEditable({ allowAdminOverride: true }),
     deleteCourse
 );
 
