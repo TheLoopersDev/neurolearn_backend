@@ -88,8 +88,9 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             res.status(404).send('Order not found');
             return;
         }
-         order.status = 'completed';
-         await order.save();
+
+        order.status = 'completed';
+        await order.save();
 
         const user = await UserModel.findById(order.userId);
         if (!user) {
@@ -159,68 +160,72 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
             );
 
             await updateRevenueForCourses(licenseQuantities, order.price);
-            const totalLicensesPurchased = Object.values(licenseQuantities).reduce((sum, qty) => sum + qty, 0);
+        }
 
-            if (totalLicensesPurchased > 0) {
-                const discountPercent = Math.min(Math.floor(totalLicensesPurchased / 10) * 10, 30);
-                const discountCode = `GIFT${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        // ======================
+        // 🎁 Tạo discount & gửi mail
+        // ======================
+        const totalLicensesPurchased = Object.values(licenseQuantities).reduce((sum, qty) => sum + qty, 0);
 
-                if (isBusiness) {
-                    // 🎯 Business
-                    await DiscountModel.create({
-                        code: discountCode,
-                        name: `Voucher ${discountPercent}% for business`,
-                        description: `Voucher for purchasing course from Academix`,
-                        discountType: 'percentage',
-                        amount: discountPercent,
-                        accessType: 'private',
-                        allowedBusinesses: [user?.businessInfo.businessId],
-                        startDate: new Date(),
-                        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                        usageLimit: 1,
-                        usedCount: 0,
-                        isActive: true
-                    });
+        if (totalLicensesPurchased > 0) {
+            // min 10%, max 30%
+            const discountPercent = Math.max(10, Math.min(Math.floor(totalLicensesPurchased / 10) * 10, 30));
+            const discountCode = `GIFT${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-                    await sendMail({
-                        email: user.email,
-                        subject: `✅ Your course purchase was successful`,
-                        template: 'purchase-success-with-discount.ejs',
-                        data: {
-                            name: user.name,
-                            discountPercent,
-                            discountCode,
-                            days: 30
-                        }
-                    });
-                } else {
-                    await DiscountModel.create({
-                        code: discountCode,
-                        name: `Voucher 10% for you`,
-                        description: `Voucher for purchasing course from Academix`,
-                        discountType: 'percentage',
-                        amount: 10,
-                        accessType: 'private',
-                        allowedUsers: [user._id],
-                        startDate: new Date(),
-                        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                        usageLimit: 1,
-                        usedCount: 0,
-                        isActive: true
-                    });
+            if (isBusiness) {
+                await DiscountModel.create({
+                    code: discountCode,
+                    name: `Voucher ${discountPercent}% for business`,
+                    description: `Voucher for purchasing course from Academix`,
+                    discountType: 'percentage',
+                    amount: discountPercent,
+                    accessType: 'private',
+                    allowedBusinesses: [user?.businessInfo.businessId],
+                    startDate: new Date(),
+                    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    usageLimit: 1,
+                    usedCount: 0,
+                    isActive: true
+                });
 
-                    await sendMail({
-                        email: user.email,
-                        subject: `✅ Your course purchase was successful`,
-                        template: 'purchase-success-with-discount.ejs',
-                        data: {
-                            name: user.name,
-                            discountPercent,
-                            discountCode,
-                            days: 30
-                        }
-                    });
-                }
+                await sendMail({
+                    email: user.email,
+                    subject: `✅ Your course purchase was successful`,
+                    template: 'purchase-success-with-discount.ejs',
+                    data: {
+                        name: user.name,
+                        discountPercent,
+                        discountCode,
+                        days: 30
+                    }
+                });
+            } else {
+                await DiscountModel.create({
+                    code: discountCode,
+                    name: `Voucher ${discountPercent}% for you`,
+                    description: `Voucher for purchasing course from Academix`,
+                    discountType: 'percentage',
+                    amount: discountPercent,
+                    accessType: 'private',
+                    allowedUsers: [user._id],
+                    startDate: new Date(),
+                    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    usageLimit: 1,
+                    usedCount: 0,
+                    isActive: true
+                });
+
+                await sendMail({
+                    email: user.email,
+                    subject: `✅ Your course purchase was successful`,
+                    template: 'purchase-success-with-discount.ejs',
+                    data: {
+                        name: user.name,
+                        discountPercent,
+                        discountCode,
+                        days: 30
+                    }
+                });
             }
         }
 
@@ -230,6 +235,7 @@ export const payosWebhook = async (req: Request, res: Response): Promise<void> =
         res.sendStatus(500);
     }
 };
+
 
 // =======================
 // Cập nhật doanh thu (đã hỗ trợ Discount)
