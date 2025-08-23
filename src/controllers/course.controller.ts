@@ -335,17 +335,21 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
     const totalCourses = instructorCourseIds.length;
 
     // === CHANGED: bỏ gating videoUrl theo isFree; giữ nguyên lesson publish ===
-    const processedSections = Array.isArray(course.sections)
-        ? course.sections.map((section: any) => ({
-              ...section,
-              lessons: Array.isArray(section.lessons)
-                  ? section.lessons.map((lesson: any) => ({
-                        ...lesson
-                        // KHÔNG còn: videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-                    }))
-                  : []
-          }))
-        : [];
+   const processedSections = Array.isArray(course.sections)
+       ? course.sections.map((section: any) => ({
+             ...section,
+             lessons: Array.isArray(section.lessons)
+                 ? section.lessons.map((lesson: any) => {
+                       const { videoUrl, ...restLesson } = lesson;
+                       return {
+                           ...restLesson,
+                           videoUrl: undefined 
+                       };
+                   })
+                 : []
+         }))
+       : [];
+
 
     const totalLessons = processedSections.reduce(
         (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
@@ -1277,15 +1281,25 @@ export const deleteCourse = catchAsync(async (req: Request, res: Response, next:
     const currentUser = req.user as any;
     const isAdmin = currentUser?.role === 'admin'; // hoặc mở rộng ['admin','superadmin']
 
-    const course = await CourseModel.findById(id);
+    const course = await CourseModel.findById(id).select('_id authorId purchased');
     if (!course) return next(new ErrorHandler('Course not found', 404));
 
-    // Instructor bị chặn nếu đã có học viên/progress; Admin thì được xóa
-    const hasPurchasedUser = await UserModel.exists({ purchasedCourses: id });
-    const hasProgress = await ProgressModel.exists({ course: id });
-    const hasPurchasedCount = typeof course.purchased === 'number' && course.purchased > 0;
+    const authorId = String(course.authorId);
 
-    if (!isAdmin && (hasPurchasedUser || hasProgress || hasPurchasedCount)) {
+    // user đã mua
+    const hasPurchasedUser = await UserModel.exists({ purchasedCourses: course._id });
+
+    // progress của người KHÁC tác giả (học thật sự)
+    const hasLearnerProgress = await ProgressModel.exists({
+        $or: [{ course: course._id }, { courseId: course._id }], // tùy schema bạn dùng
+        user: { $ne: authorId }
+        // tùy chọn: chỉ tính khi đã bắt đầu học
+        // 'completedSections.0': { $exists: true }
+    });
+
+    const hasPurchasedCount = Number(course.purchased) > 0;
+
+    if (!isAdmin && (hasPurchasedUser || hasLearnerProgress || hasPurchasedCount)) {
         return next(
             new ErrorHandler(
                 'This course already has enrolled learners, so it cannot be deleted. Consider unpublishing it instead.',
@@ -2242,6 +2256,24 @@ export const getSingleCourseFullDetail = catchAsync(async (req: Request, res: Re
     });
 });
 
+export async function ensureProgressSeededReview(userId: string, courseId: string) {
+    const now = new Date();
+    try {
+        const doc = await ProgressModel.findOneAndUpdate(
+            { userId, courseId }, // unique key
+            { $setOnInsert: { userId, courseId, completedSections: [], createdAt: now, updatedAt: now } },
+            { upsert: true, new: true } // atomic upsert
+        ).lean();
+        return doc;
+    } catch (e: any) {
+        // Nếu vẫn dính race ở môi trường cũ: trả về doc hiện có thay vì 400
+        if (e?.code === 11000 || /duplicate/i.test(String(e?.message || ''))) {
+            return ProgressModel.findOne({ userId, courseId }).lean();
+        }
+        throw e;
+    }
+}
+
 // Lấy toàn bộ dữ liệu cho trang Review: gồm cả section/lesson DRAFT
 export const getReviewCourseById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const dbgOn = process.env.QUIZ_DEBUG === '1';
@@ -2298,8 +2330,15 @@ export const getReviewCourseById = catchAsync(async (req: Request, res: Response
 
     // 4) Progress: seed theo bài đã publish (đúng logic học), draft không tính vào progress
     let progressDoc: any = null;
-    if (userId) progressDoc = await ensureProgressSeeded(String(userId), String(courseId));
-
+    if (userId) {
+        try {
+            progressDoc = await ensureProgressSeededReview(String(userId), String(courseId));
+        } catch (e: any) {
+            // fallback cuối cùng: không chặn toàn response vì seed lỗi
+            console.warn('[review] progress seed skipped:', e?.message || e);
+            progressDoc = null;
+        }
+    }
     const completedMap = new Map<string, Set<string>>();
     for (const sec of progressDoc?.completedSections || []) {
         const sid = String(sec.sectionId);
