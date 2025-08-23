@@ -78,3 +78,33 @@ export const getCertificateByCourse = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
+
+export const getCertificatesByInstructor = async (req: Request, res: Response) => {
+  try {
+    const instructorId = req.user?._id;
+
+    if (!instructorId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // First, find all courses created by this instructor
+    const Course = mongoose.model('Course');
+    const instructorCourses = await Course.find({ authorId: instructorId }).select('_id');
+
+    if (instructorCourses.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const courseIds = instructorCourses.map(course => course._id);
+
+    // Then, find all certificates for these courses
+    const certificates = await Certificate.find({ course: { $in: courseIds } })
+      .populate('user', 'name email')
+      .populate('course', 'title authorId')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(certificates);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
