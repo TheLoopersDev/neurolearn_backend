@@ -135,108 +135,148 @@ import CertificateModel from '../models/Certificate.model';
 //     });
 // });
 
+// ===== Update lesson completion =====
 export const updateLessonCompletionStatus = catchAsync(async (req: Request, res: Response, next: any) => {
-    const userId = req.user?._id as string | undefined;
-    const courseId = req.params.id as string;
-    const { lessonId, isCompleted } = req.body as { lessonId?: string; isCompleted?: boolean | string };
+  const userId = req.user?._id as string | undefined;
+  const courseId = req.params.id as string;
+  const { lessonId, isCompleted } = req.body as { lessonId?: string; isCompleted?: boolean | string };
 
-    if (!userId) return next(new ErrorHandler('Unauthorized', 401));
-    if (!courseId || !lessonId) return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
+  if (!userId) return next(new ErrorHandler('Unauthorized', 401));
+  if (!courseId || !lessonId) return next(new ErrorHandler('Course ID and Lesson ID are required', 400));
 
-    // Chuẩn hoá boolean
-    const completed = isCompleted === true || isCompleted === 'true';
+  // Chuẩn hóa boolean
+  const completed = isCompleted === true || isCompleted === 'true';
 
-    // ===== 1) Lấy lesson & section (đảm bảo là lesson publish) =====
-    const lesson = await LessonModel.findById(lessonId).populate('sectionId');
-    if (!lesson) return next(new ErrorHandler('Lesson not found', 404));
-    const sectionId = (lesson.sectionId as any)?._id || (lesson.sectionId as any);
-
-    const section = await SectionModel.findOne({ _id: sectionId, course: courseId, isPublished: true }).populate({
+  // 1) Lấy course với sections/lessons ĐANG ĐƯỢC DÙNG (ground-truth)
+  const course = await CourseModel.findById(courseId).populate([
+    {
+      path: 'sections',
+      match: { isPublished: true },
+      options: { sort: { order: 1 } },
+      populate: {
         path: 'lessons',
         match: { isPublished: true },
-        select: '_id',
+        select: '_id sectionId',
         options: { sort: { order: 1 } }
-    });
-    if (!section) return next(new ErrorHandler('Section not found', 404));
-
-    // ===== 2) Lấy progress hoặc seed mới từ cấu trúc course (publish) =====
-    let progress = await ProgressModel.findOne({ user: userId, course: courseId });
-    if (!progress) {
-        const sections = await SectionModel.find({ course: courseId, isPublished: true })
-            .sort({ order: 1 })
-            .populate({
-                path: 'lessons',
-                match: { isPublished: true },
-                select: '_id',
-                options: { sort: { order: 1 } }
-            });
-
-        progress = new ProgressModel({
-            user: userId,
-            course: courseId,
-            completedSections: sections.map((sec: any) => ({
-                sectionId: sec._id,
-                // totalLessonsInSection & completedLessons sẽ auto-calc
-                lessons: (sec.lessons || []).map((l: any) => ({
-                    lessonId: l._id,
-                    isCompleted: false
-                }))
-            }))
-        });
-    } else {
-        // ===== 2b) Đồng bộ lại completedSections theo cấu trúc thật (nếu có thay đổi) =====
-        // - đảm bảo mọi lesson publish đều có entry; không xoá entry cũ để không mất tiến độ
-        const secIdx = progress.completedSections.findIndex((s: any) => String(s.sectionId) === String(sectionId));
-        if (secIdx === -1) {
-            progress.completedSections.push({
-                sectionId,
-                lessons: (section.lessons || []).map((l: any) => ({ lessonId: l._id, isCompleted: false }))
-            } as any);
-        } else {
-            const secProg = progress.completedSections[secIdx];
-            const existing = new Map<string, boolean>();
-            for (const it of secProg.lessons || []) existing.set(String(it.lessonId), !!it.isCompleted);
-
-            // Upsert tất cả lesson publish hiện tại
-            const merged = (section.lessons || []).map((l: any) => {
-                const key = String(l._id);
-                return { lessonId: l._id, isCompleted: existing.has(key) ? existing.get(key)! : false };
-            });
-
-            secProg.lessons = merged as any;
-            progress.completedSections[secIdx] = secProg;
-        }
+      }
     }
+  ]);
 
-    // ===== 3) Đặt cờ hoàn thành cho lesson hiện tại =====
-    const targetSection = progress.completedSections.find((s: any) => String(s.sectionId) === String(sectionId));
-    if (!targetSection) return next(new ErrorHandler('Section progress not found after sync', 500));
+  if (!course) return next(new ErrorHandler('Course not found', 404));
 
-    const lIdx = targetSection.lessons.findIndex((l: any) => String(l.lessonId) === String(lessonId));
-    if (lIdx === -1) {
-        // Phòng hờ edge case
-        targetSection.lessons.push({ lessonId, isCompleted: completed } as any);
-    } else {
-        targetSection.lessons[lIdx].isCompleted = completed;
+  // 2) Tìm section chứa lessonId trong snapshot của course
+  let containingSectionId: any = null;
+  for (const sec of (course.sections as any[]) || []) {
+    for (const l of (sec.lessons as any[]) || []) {
+      if (String(l._id) === String(lessonId)) {
+        containingSectionId = sec._id;
+        break;
+      }
     }
+    if (containingSectionId) break;
+  }
+  if (!containingSectionId) {
+    return next(new ErrorHandler('Lesson not found in this course or not published', 404));
+  }
 
-    // ===== 4) Lưu (middleware sẽ tự tính counters & percentage) =====
-    progress.markModified('completedSections');
-    await progress.save();
-
-    // (Optional) cache & certificate
-    await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
-    await issueCertificateIfCompleted(userId.toString(), courseId.toString(), {
-        totalCompleted: progress.totalCompleted,
-        totalLessons: progress.totalLessons
+  // 3) Lấy progress hoặc khởi tạo
+  let progress = await ProgressModel.findOne({ user: userId, course: courseId });
+  if (!progress) {
+    progress = new ProgressModel({
+      user: userId,
+      course: courseId,
+      completedSections: []
     });
+  }
 
-    return res.status(200).json({
-        success: true,
-        message: 'Lesson completion status updated successfully',
-        data: progress
-    });
+  // 4) Đồng bộ progress THEO DANH SÁCH sections/lessons của course (loại sạch rác)
+  //    - Giữ lại trạng thái isCompleted cũ nếu có
+  const prevCompletedMap = new Map<string, boolean>();
+  for (const sec of (progress.completedSections as any[]) || []) {
+    for (const l of (sec.lessons as any[]) || []) {
+      prevCompletedMap.set(String(l.lessonId), !!l.isCompleted);
+    }
+  }
+
+  const syncedSections = ((course.sections as any[]) || []).map((sec: any) => {
+    const lessons = ((sec.lessons as any[]) || []).map((l: any) => ({
+      lessonId: l._id,
+      isCompleted: prevCompletedMap.get(String(l._id)) ?? false
+    }));
+    const completedLessons = lessons.reduce((acc, it) => acc + (it.isCompleted ? 1 : 0), 0);
+    return {
+      sectionId: sec._id,
+      lessons,
+      completedLessons,
+      totalLessonsInSection: lessons.length
+    };
+  });
+
+  progress.completedSections = syncedSections;
+
+  // 5) Cập nhật cờ cho lesson hiện tại
+  const targetSection = (progress.completedSections as any[]).find(
+    (s: any) => String(s.sectionId) === String(containingSectionId)
+  );
+  if (!targetSection) return next(new ErrorHandler('Section progress not found after sync', 500));
+
+  const lIdx = (targetSection.lessons as any[]).findIndex(
+    (l: any) => String(l.lessonId) === String(lessonId)
+  );
+  if (lIdx === -1) {
+    // (Edge hiếm) lesson vừa sync không có — thêm vào cho chắc
+    targetSection.lessons.push({ lessonId, isCompleted: completed } as any);
+  } else {
+    targetSection.lessons[lIdx].isCompleted = completed;
+  }
+  // Recompute section counters
+  targetSection.completedLessons = (targetSection.lessons as any[]).reduce(
+    (acc: number, it: any) => acc + (it.isCompleted ? 1 : 0),
+    0
+  );
+  targetSection.totalLessonsInSection = (targetSection.lessons as any[]).length;
+
+  // 6) Tính tổng (ground-truth theo course.sections)
+  const totalLessons = ((course.sections as any[]) || []).reduce(
+    (sum, sec: any) => sum + (((sec.lessons as any[]) || []).length),
+    0
+  );
+  const totalCompleted = (progress.completedSections as any[]).reduce(
+    (sum: number, sec: any) => sum + (sec.lessons as any[]).filter((x: any) => x.isCompleted).length,
+    0
+  );
+  const progressPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+  // (Optional) nếu schema có các field này, set để dọn dữ liệu sai cũ
+  (progress as any).totalLessons = totalLessons;
+  (progress as any).totalCompleted = totalCompleted;
+  (progress as any).progressPercentage = progressPercentage;
+
+  // 7) Lưu + cache
+  progress.markModified('completedSections');
+  await progress.save();
+  await redis.set(`progress:${userId}:${courseId}`, JSON.stringify(progress));
+
+  // 8) Certificate
+  await issueCertificateIfCompleted(String(userId), String(courseId), {
+    totalCompleted,
+    totalLessons
+  });
+
+  // 9) Response
+  return res.status(200).json({
+    success: true,
+    message: 'Lesson completion status updated successfully',
+    data: {
+      ...progress.toObject(),
+      totalLessons,
+      totalCompleted,
+      completionPercentage: progressPercentage
+    }
+  });
 });
+
+
 
 
 // Get progress data by userId & courseId
