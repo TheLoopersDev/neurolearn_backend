@@ -335,17 +335,21 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
     const totalCourses = instructorCourseIds.length;
 
     // === CHANGED: bỏ gating videoUrl theo isFree; giữ nguyên lesson publish ===
-    const processedSections = Array.isArray(course.sections)
-        ? course.sections.map((section: any) => ({
-              ...section,
-              lessons: Array.isArray(section.lessons)
-                  ? section.lessons.map((lesson: any) => ({
-                        ...lesson
-                        // KHÔNG còn: videoUrl: lesson.isFree ? lesson.videoUrl : undefined
-                    }))
-                  : []
-          }))
-        : [];
+   const processedSections = Array.isArray(course.sections)
+       ? course.sections.map((section: any) => ({
+             ...section,
+             lessons: Array.isArray(section.lessons)
+                 ? section.lessons.map((lesson: any) => {
+                       const { videoUrl, ...restLesson } = lesson;
+                       return {
+                           ...restLesson,
+                           videoUrl: undefined 
+                       };
+                   })
+                 : []
+         }))
+       : [];
+
 
     const totalLessons = processedSections.reduce(
         (sum, section) => sum + (Array.isArray(section.lessons) ? section.lessons.length : 0),
