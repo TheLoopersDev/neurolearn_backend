@@ -321,7 +321,8 @@ export const getSingleCourse = catchAsync(async (req: Request, res: Response, ne
             },
             {
                 path: 'reviews',
-                populate: { path: 'user', select: 'name avatar' }
+                select: 'rating comment createdAt updatedAt commentReplies user',
+                populate: { path: 'user', select: 'name avatar createdAt' }
             }
         ])
         .lean<ICourseDetail>();
