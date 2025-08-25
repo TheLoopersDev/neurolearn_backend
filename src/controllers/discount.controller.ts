@@ -133,14 +133,14 @@ export const createDiscount = catchAsync(async (req: Request, res: Response, nex
 // Get all discounts with pagination and filters
 export const getAllDiscounts = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const { page = 1, limit = 10, search, discountType, accessType, isActive, businessId } = req.query;
-    
+
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter
     const filter: any = {};
-    
+
     if (search) {
         filter.$or = [
             { code: { $regex: search, $options: 'i' } },
@@ -148,26 +148,26 @@ export const getAllDiscounts = catchAsync(async (req: Request, res: Response, ne
             { description: { $regex: search, $options: 'i' } }
         ];
     }
-    
+
     if (discountType) {
         filter.discountType = discountType;
     }
-    
+
     if (accessType) {
         filter.accessType = accessType;
     }
-    
+
     if (isActive !== undefined) {
         filter.isActive = isActive === 'true';
     }
-    
+
     if (businessId) {
         filter.businessId = businessId;
     }
 
     // Get total count for pagination
     const totalDiscounts = await DiscountModel.countDocuments(filter);
-    
+
     // Get discounts with pagination and populate
     const discounts = await DiscountModel.find(filter)
         .populate('courseIds', 'name description thumbnail price')
@@ -250,7 +250,7 @@ export const updateDiscount = catchAsync(async (req: Request, res: Response, nex
 
     // Check if code already exists (if updating code)
     if (updateData.code && updateData.code !== discount.code) {
-        const existingDiscount = await DiscountModel.findOne({ 
+        const existingDiscount = await DiscountModel.findOne({
             code: updateData.code.toUpperCase(),
             _id: { $ne: id }
         });
@@ -304,14 +304,11 @@ export const updateDiscount = catchAsync(async (req: Request, res: Response, nex
         updateData.allowedUsers = updateData.allowedUsers.filter((id: string) => id && id.trim() !== '');
     }
 
-    const updatedDiscount = await DiscountModel.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-    ).populate('courseIds', 'name description thumbnail price')
-     .populate('businessId', 'businessName')
-     .populate('allowedUsers', 'name email')
-     .populate('allowedBusinesses', 'businessName');
+    const updatedDiscount = await DiscountModel.findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+        .populate('courseIds', 'name description thumbnail price')
+        .populate('businessId', 'businessName')
+        .populate('allowedUsers', 'name email')
+        .populate('allowedBusinesses', 'businessName');
 
     res.status(200).json({
         success: true,
@@ -355,7 +352,7 @@ export const validateDiscountCode = catchAsync(async (req: Request, res: Respons
     const cleanBusinessId = businessId && businessId.trim() !== '' ? businessId : undefined;
     const cleanCourseId = courseId && courseId.trim() !== '' ? courseId : undefined;
 
-    const discount = await DiscountModel.findOne({ 
+    const discount = await DiscountModel.findOne({
         code: code.toUpperCase(),
         isActive: true
     });
@@ -365,7 +362,7 @@ export const validateDiscountCode = catchAsync(async (req: Request, res: Respons
     }
 
     const now = new Date();
-    
+
     // Check if discount is within valid date range
     if (now < discount.startDate || now > discount.endDate) {
         return next(new ErrorHandler('Discount code is not valid at this time', 400));
@@ -435,10 +432,10 @@ export const validateDiscountCode = catchAsync(async (req: Request, res: Respons
 export const getDiscountStatistics = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const totalDiscounts = await DiscountModel.countDocuments({});
     const activeDiscounts = await DiscountModel.countDocuments({ isActive: true });
-    const expiredDiscounts = await DiscountModel.countDocuments({ 
+    const expiredDiscounts = await DiscountModel.countDocuments({
         endDate: { $lt: new Date() }
     });
-    const upcomingDiscounts = await DiscountModel.countDocuments({ 
+    const upcomingDiscounts = await DiscountModel.countDocuments({
         startDate: { $gt: new Date() }
     });
 
@@ -486,7 +483,7 @@ export const getAvailableDiscounts = async (req: Request, res: Response) => {
     try {
         const userId = req.user?._id;
         const businessId = req.user?.businessInfo?.businessId;
-
+        const role = req.user?.businessInfo?.role;
         if (!userId && !businessId) {
             res.status(400).json({ success: false, message: 'Missing userId or businessId' });
             return;
@@ -509,6 +506,10 @@ export const getAvailableDiscounts = async (req: Request, res: Response) => {
 
         if (privateCondition.$or.length > 0) {
             conditions.push(privateCondition);
+        }
+
+        if (businessId && role === 'admin') {
+            conditions.push({ businessId: new mongoose.Types.ObjectId(String(businessId)) });
         }
 
         // Query
