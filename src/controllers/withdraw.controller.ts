@@ -77,9 +77,14 @@ export const updateWithdrawStatus = catchAsync(async (req: Request, res: Respons
   if (transactionId) update.transactionId = transactionId;
   const withdraw = await withdrawService.updateWithdrawStatus(req.params.id, update);
   if (!withdraw) return res.status(404).json({ success: false, message: 'Withdraw not found' });
-  // Nếu duyệt, trừ tiền vào revenue của instructor
+  // Nếu duyệt, tăng withdrawn thay vì trừ total để chỉ trừ vào net income
   if (status === 'approved') {
-    await revenueService.decreaseRevenue(withdraw.user.toString(), withdraw.amount);
+    // Validate available balance before approving
+    const revenueData = await revenueService.getRevenueWithSubmission(withdraw.user.toString());
+    if ((revenueData.available || 0) < withdraw.amount) {
+      return res.status(400).json({ success: false, message: 'Không đủ số dư để rút' });
+    }
+    await revenueService.increaseWithdrawn(withdraw.user.toString(), withdraw.amount);
   }
   res.json({ success: true, data: withdraw });
 });
