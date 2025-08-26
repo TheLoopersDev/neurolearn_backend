@@ -119,8 +119,13 @@ export const getAllInstructorsSubmission = async () => {
         }
       }
       
+      // Xử lý userId an toàn khi user có thể null hoặc không được populate
+      const userId = (typeof user === 'object' && user !== null)
+        ? (user._id ?? null)
+        : (revenue.user ?? null);
+
       return {
-        userId: revenue.user._id || revenue.user,
+        userId: userId,
         userName,
         userEmail,
         userAvatar,
