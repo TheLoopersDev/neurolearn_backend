@@ -50,15 +50,29 @@ const allowedOrigins = Array.from(
 app.use(
     cors({
         origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
+            // Allow requests with no origin (like mobile apps or curl requests)
+            if (!origin) {
+                return callback(null, true);
             }
+
+            // Check if origin is in allowed list
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            // For development, allow all localhost origins
+            if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) {
+                return callback(null, true);
+            }
+
+            // Log blocked origins for debugging
+            console.log('Blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
         },
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+        exposedHeaders: ['Set-Cookie']
     })
 );
 

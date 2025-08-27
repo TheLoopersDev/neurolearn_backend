@@ -242,18 +242,18 @@ export const loginUser = catchAsync(async (req: Request, res: Response, next: Ne
 
 export const logoutUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     res.cookie('access_token', '', {
-        domain: '.vercel.app',
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
-        maxAge: 1
+        maxAge: 1,
+        path: '/'
     });
     res.cookie('refresh_token', '', {
-        domain: '.vercel.app',
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
-        maxAge: 1
+        maxAge: 1,
+        path: '/'
     });
 
     const userId = req.user?._id || '';
