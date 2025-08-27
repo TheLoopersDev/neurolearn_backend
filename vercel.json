@@ -1,0 +1,11 @@
+{
+    "functions": {
+        "src/server.ts": {
+            "runtime": "nodejs20.x",
+            "includeFiles": ["dist/**", "public/**", "node_modules/**"]
+        }
+    },
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
+    "routes": [{ "src": "/(.*)", "dest": "src/server.ts" }]
+}
