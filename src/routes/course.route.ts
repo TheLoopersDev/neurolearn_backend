@@ -1135,7 +1135,7 @@ router.get(
  *                         type: object
  *                         properties:
  *                           name:
- *                         type: string
+ *                             type: string
  *                       createdAt:
  *                         type: string
  *                       updatedAt:
