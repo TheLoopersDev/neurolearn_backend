@@ -1,11 +1,38 @@
 {
     "version": 2,
+    "builds": [
+        {
+            "src": "src/server.ts",
+            "use": "@vercel/node",
+            "config": {
+                "includeFiles": ["src/**/*", "public/**/*", "uploads/**/*"]
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "src/server.ts"
+        },
+        {
+            "src": "/uploads/(.*)",
+            "dest": "src/server.ts"
+        },
+        {
+            "src": "/public/(.*)",
+            "dest": "src/server.ts"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "src/server.ts"
+        }
+    ],
+    "env": {
+        "NODE_ENV": "production"
+    },
     "functions": {
         "src/server.ts": {
-            "includeFiles": "dist/**"
+            "maxDuration": 30
         }
-    },
-    "installCommand": "npm install",
-    "buildCommand": "npm run build",
-    "routes": [{ "src": "/(.*)", "dest": "src/server.ts" }]
+    }
 }
