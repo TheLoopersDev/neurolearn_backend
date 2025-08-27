@@ -22,7 +22,7 @@ import {
     getSignatureForDelete,
     deleteLesson,
     publishLesson,
-    unPublishLesson,
+    unpublishLesson,
     publishSection,
     unpublishSection,
     deleteSection,
@@ -40,7 +40,8 @@ import {
     getInstructorCourseStats,
     getLatestCourseStatus,
     getTopViewing,
-    getAllAssignedCoursesOfUser
+    getAllAssignedCoursesOfUser,
+    getPublishedCoursesForAdmin
 } from '../controllers/course.controller';
 import { getUserInfo, updateAccessToken } from '../controllers/user.controller';
 import { createSection, updateSection } from '../controllers/section.controller';
@@ -914,7 +915,7 @@ router.put('/publish-lesson/:id', isAuthenticated, updateAccessToken, publishLes
  *       401:
  *         description: Not authenticated
  */
-router.put('/unpublish-lesson/:id', isAuthenticated, updateAccessToken, unPublishLesson);
+router.put('/unpublish-lesson/:id', isAuthenticated, updateAccessToken, unpublishLesson);
 
 /**
  * @swagger
@@ -1039,6 +1040,120 @@ router.get(
     isAuthenticated,
     authorizeRoles('instructor'),
     getLatestCourseStatus
+);
+
+/**
+ * @swagger
+ * /api/courses/admin/published:
+ *   get:
+ *     summary: Get all published courses for admin
+ *     tags: [Courses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for course name, subtitle, or description
+ *       - in: query
+ *         name: level
+ *         schema:
+ *           type: string
+ *         description: Level ID to filter by
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, name, price, rating, purchased]
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: List of all published courses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       subTitle:
+ *                         type: string
+ *                       price:
+ *                         type: number
+ *                       isFree:
+ *                         type: boolean
+ *                       rating:
+ *                         type: number
+ *                       purchased:
+ *                         type: number
+ *                       lessonsCount:
+ *                         type: number
+ *                       durationInHours:
+ *                         type: string
+ *                       totalSections:
+ *                         type: number
+ *                       authorId:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           avatar:
+ *                             type: string
+ *                           profession:
+ *                             type: string
+ *                       category:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                       subCategory:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                       level:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                       updatedAt:
+ *                         type: string
+ *                 totalCourses:
+ *                   type: number
+ *                   description: Total number of published courses
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized (admin role required)
+ */
+router.get(
+    '/admin/published',
+    updateAccessToken,
+    isAuthenticated,
+    authorizeRoles('admin'),
+    getPublishedCoursesForAdmin
 );
 
 export = router;

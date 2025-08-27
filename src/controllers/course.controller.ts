@@ -617,7 +617,7 @@ export const publishLesson = catchAsync(async (req: Request, res: Response, next
 });
 
 // unpublish lesson
-export const unPublishLesson = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+export const unpublishLesson = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const courseId = req.params.id;
 
     if (!courseId) {
@@ -2582,5 +2582,65 @@ export const checkCoursePurchased = catchAsync(async (req: Request, res: Respons
     return res.status(200).json({
         success: true,
         isPurchased
+    });
+});
+
+export const getPublishedCoursesForAdmin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { search, level, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    
+    // Build query for published courses
+    const query: any = { isPublished: true };
+    
+    // Add search filter
+    if (search) {
+        query.$or = [
+            { name: { $regex: search as string, $options: 'i' } },
+            { subTitle: { $regex: search as string, $options: 'i' } },
+            { description: { $regex: search as string, $options: 'i' } }
+        ];
+    }
+    
+    // Add level filter
+    if (level) {
+        query.level = level;
+    }
+    
+    // Build sort object
+    const sort: any = {};
+    sort[sortBy as string] = sortOrder === 'desc' ? -1 : 1;
+    
+    // Get all published courses with populate necessary fields
+    const courses = await CourseModel.find(query)
+        .populate('authorId', 'name email avatar profession')
+        .populate('category', 'name')
+        .populate('subCategory', 'name')
+        .populate('level', 'name')
+        .sort(sort)
+        .lean();
+    
+    // Calculate additional stats for each course
+    const coursesWithStats = await Promise.all(
+        courses.map(async (course) => {
+            // Count lessons
+            const sectionIds = course.sections || [];
+            const lessonsCount = await LessonModel.countDocuments({ sectionId: { $in: sectionIds } });
+            
+            // Calculate duration in hours
+            const durationInMinutes = course.duration || 0;
+            const durationInHours = (durationInMinutes / 60).toFixed(1);
+            
+            return {
+                ...course,
+                lessonsCount,
+                durationInHours: `${durationInHours} hours`,
+                totalSections: sectionIds.length
+            };
+        })
+    );
+    
+    res.status(200).json({
+        success: true,
+        data: coursesWithStats,
+        totalCourses: coursesWithStats.length
     });
 });
