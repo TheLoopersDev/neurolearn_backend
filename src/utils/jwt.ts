@@ -9,6 +9,7 @@ interface ITokenOptions {
     sameSite: 'lax' | 'strict' | 'none' | boolean;
     secure?: boolean;
     path?: string;
+    domain?: string;
 }
 const isProd = process.env.NODE_ENV === 'production';
 
