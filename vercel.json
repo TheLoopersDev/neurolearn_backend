@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "functions": {
+    "api/**/*.ts": { "runtime": "nodejs22.x" },
+    "api/**/*.js": { "runtime": "nodejs22.x" }
+  },
+  "buildCommand": "npm run build",
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index" }
+  ]
+}
