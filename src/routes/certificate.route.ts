@@ -6,7 +6,7 @@ import { authorizeRoles } from '../middlewares/auth/authorizeRoles';
 const router = express.Router();
 
 // Lấy certificate theo ID
-router.get('/:id', isAuthenticated, (req, res, next) => {
+router.get('/:id', (req, res, next) => {
   getCertificateById(req, res).catch(next);
 });
 
