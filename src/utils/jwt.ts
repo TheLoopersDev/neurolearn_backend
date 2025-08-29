@@ -9,6 +9,7 @@ interface ITokenOptions {
     sameSite: 'lax' | 'strict' | 'none' | boolean;
     secure?: boolean;
     path?: string;
+    domain?: string;
 }
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -23,8 +24,8 @@ export const accessTokenOptions: ITokenOptions = {
     httpOnly: true,
     secure: isProd,
     path: '/',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    // secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Let browser set domain automatically
 };
 
 export const refreshTokenOptions: ITokenOptions = {
@@ -33,7 +34,8 @@ export const refreshTokenOptions: ITokenOptions = {
     httpOnly: true,
     secure: isProd,
     path: '/',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Let browser set domain automatically
 };
 
 export const sendToken = (user: UserT, statusCode: number, res: Response) => {
